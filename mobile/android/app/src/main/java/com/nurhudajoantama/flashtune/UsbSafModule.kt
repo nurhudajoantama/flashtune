@@ -16,7 +16,6 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 
 class UsbSafModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -169,7 +168,7 @@ class UsbSafModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun writeFile(destUri: String, sourcePath: String, promise: Promise) {
+  fun writeFile(dirUri: String, filename: String, sourcePath: String, promise: Promise) {
     try {
       val srcFile = File(sourcePath)
       if (!srcFile.exists() || !srcFile.isFile) {
@@ -177,9 +176,26 @@ class UsbSafModule(private val reactContext: ReactApplicationContext) :
         return
       }
 
-      val destination = resolveDocumentForWrite(destUri)
-      if (destination == null || destination.isDirectory) {
-        promise.reject("E_WRITE_FILE", "Destination file is invalid: $destUri")
+      if (filename.isBlank()) {
+        promise.reject("E_WRITE_FILE", "Filename is required")
+        return
+      }
+
+      val dir = resolveRootDirectory(dirUri)
+      if (dir == null || !dir.exists() || !dir.isDirectory) {
+        promise.reject("E_WRITE_FILE", "Directory is invalid: $dirUri")
+        return
+      }
+
+      val existing = dir.findFile(filename)
+      val destination = when {
+        existing == null -> dir.createFile("audio/mpeg", filename)
+        existing.isDirectory -> null
+        else -> existing
+      }
+
+      if (destination == null) {
+        promise.reject("E_WRITE_FILE", "Unable to create destination file: $filename")
         return
       }
 
@@ -188,7 +204,7 @@ class UsbSafModule(private val reactContext: ReactApplicationContext) :
           copyStream(input, out)
         }
       } ?: run {
-        promise.reject("E_WRITE_FILE", "Unable to open destination stream: $destUri")
+        promise.reject("E_WRITE_FILE", "Unable to open destination stream: $filename")
         return
       }
 
@@ -199,29 +215,34 @@ class UsbSafModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun readFile(sourceUri: String, destPath: String, promise: Promise) {
+  fun renameFile(fileUri: String, newName: String, promise: Promise) {
     try {
-      val source = resolveExistingDocument(sourceUri)
-      if (source == null || !source.exists() || source.isDirectory) {
-        promise.reject("E_READ_FILE", "Source file does not exist: $sourceUri")
+      val file = resolveExistingDocument(fileUri)
+      if (file == null || !file.exists() || file.isDirectory) {
+        promise.reject("E_RENAME_FILE", "File does not exist: $fileUri")
         return
       }
 
-      val destinationFile = File(destPath)
-      destinationFile.parentFile?.mkdirs()
-
-      reactContext.contentResolver.openInputStream(source.uri)?.use { input ->
-        FileOutputStream(destinationFile, false).use { out ->
-          copyStream(input, out)
-        }
-      } ?: run {
-        promise.reject("E_READ_FILE", "Unable to open source stream: $sourceUri")
+      val targetName = newName.trim()
+      if (targetName.isBlank()) {
+        promise.reject("E_RENAME_FILE", "New filename is required")
         return
       }
 
-      promise.resolve(null)
+      val renamedUri = DocumentsContract.renameDocument(
+        reactContext.contentResolver,
+        file.uri,
+        targetName,
+      )
+
+      if (renamedUri == null) {
+        promise.reject("E_RENAME_FILE", "Unable to rename file: $fileUri")
+        return
+      }
+
+      promise.resolve(renamedUri.toString())
     } catch (e: Exception) {
-      rejectPromise(promise, "E_READ_FILE", "Failed to read file from USB.", e)
+      rejectPromise(promise, "E_RENAME_FILE", "Failed to rename file.", e)
     }
   }
 
@@ -276,106 +297,6 @@ class UsbSafModule(private val reactContext: ReactApplicationContext) :
     }
   }
 
-  @ReactMethod
-  fun copyDatabase(usbRootUri: String, destPath: String, promise: Promise) {
-    try {
-      val dbFile = resolveChildFromRoot(usbRootUri, DATABASE_FILENAME)
-      if (dbFile == null || !dbFile.exists() || dbFile.isDirectory) {
-        promise.reject("E_COPY_DATABASE", "USB database file not found: $DATABASE_FILENAME")
-        return
-      }
-
-      val localFile = File(destPath)
-      localFile.parentFile?.mkdirs()
-
-      reactContext.contentResolver.openInputStream(dbFile.uri)?.use { input ->
-        FileOutputStream(localFile, false).use { out ->
-          copyStream(input, out)
-        }
-      } ?: run {
-        promise.reject("E_COPY_DATABASE", "Unable to open USB database stream.")
-        return
-      }
-
-      promise.resolve(null)
-    } catch (e: Exception) {
-      rejectPromise(promise, "E_COPY_DATABASE", "Failed to copy USB database.", e)
-    }
-  }
-
-  @ReactMethod
-  fun syncDatabase(sourcePath: String, usbRootUri: String, promise: Promise) {
-    try {
-      val localFile = File(sourcePath)
-      if (!localFile.exists() || !localFile.isFile) {
-        promise.reject("E_SYNC_DATABASE", "Local database file does not exist: $sourcePath")
-        return
-      }
-
-      val root = resolveRootDirectory(usbRootUri)
-      if (root == null || !root.exists() || !root.isDirectory) {
-        promise.reject("E_SYNC_DATABASE", "USB root URI is invalid: $usbRootUri")
-        return
-      }
-
-      val target = root.findFile(DATABASE_FILENAME)
-      val dbFile = when {
-        target == null -> root.createFile("application/octet-stream", DATABASE_FILENAME)
-        target.isDirectory -> null
-        else -> target
-      }
-
-      if (dbFile == null) {
-        promise.reject("E_SYNC_DATABASE", "Unable to create USB database file: $DATABASE_FILENAME")
-        return
-      }
-
-      reactContext.contentResolver.openOutputStream(dbFile.uri, "wt")?.use { out ->
-        FileInputStream(localFile).use { input ->
-          copyStream(input, out)
-        }
-      } ?: run {
-        promise.reject("E_SYNC_DATABASE", "Unable to open USB database output stream.")
-        return
-      }
-
-      promise.resolve(null)
-    } catch (e: Exception) {
-      rejectPromise(promise, "E_SYNC_DATABASE", "Failed to sync USB database.", e)
-    }
-  }
-
-  private fun resolveDocumentForWrite(targetUri: String): DocumentFile? {
-    val treeMatch = matchRootAndSegments(targetUri)
-    if (treeMatch != null) {
-      val rootDoc = resolveRootDirectory(treeMatch.first.toString()) ?: return null
-      val segments = treeMatch.second
-      if (segments.isEmpty()) return null
-
-      var current = rootDoc
-      for (i in 0 until segments.size - 1) {
-        val segment = segments[i]
-        val existing = current.findFile(segment)
-        current = when {
-          existing == null -> current.createDirectory(segment) ?: return null
-          existing.isDirectory -> existing
-          else -> return null
-        }
-      }
-
-      val fileName = segments.last()
-      val existing = current.findFile(fileName)
-      return when {
-        existing == null -> current.createFile("application/octet-stream", fileName)
-        existing.isDirectory -> null
-        else -> existing
-      }
-    }
-
-    val direct = DocumentFile.fromSingleUri(reactContext, Uri.parse(targetUri))
-    return if (direct?.exists() == true) direct else null
-  }
-
   private fun resolveExistingDocument(targetUri: String): DocumentFile? {
     val treeMatch = matchRootAndSegments(targetUri)
     if (treeMatch != null) {
@@ -402,11 +323,6 @@ class UsbSafModule(private val reactContext: ReactApplicationContext) :
     val uri = Uri.parse(rootUri)
     val root = DocumentFile.fromTreeUri(reactContext, uri)
     return if (root != null && root.exists()) root else null
-  }
-
-  private fun resolveChildFromRoot(rootUri: String, childName: String): DocumentFile? {
-    val root = resolveRootDirectory(rootUri) ?: return null
-    return root.findFile(childName)
   }
 
   private fun resolveRootUri(inputUri: String): Uri {
@@ -518,7 +434,6 @@ class UsbSafModule(private val reactContext: ReactApplicationContext) :
     private const val REQUEST_OPEN_TREE = 43001
     private const val PREFS_NAME = "UsbSafModulePrefs"
     private const val PREF_USB_ROOT_URI = "usb_root_uri"
-    private const val DATABASE_FILENAME = ".musicdb"
     private const val BUFFER_SIZE = 8192
   }
 }

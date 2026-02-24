@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react'
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native'
 import { useUSBStore } from '../store/usb.store'
-import { usePlayerStore } from '../store/player.store'
 import { formatBytes } from '../utils/helpers'
 import {
   clearUsbPermission,
@@ -11,8 +10,6 @@ import {
   requestUsbPermission,
   type FileEntry,
 } from '../services/usb.service'
-import { attachUsbDatabase, detachUsbDatabase } from '../services/database.service'
-import { resetTrackPlayer, stopTrackPlayer } from '../services/track-player.service'
 
 type UsbFile = FileEntry & { id: string; uri: string }
 
@@ -30,7 +27,6 @@ export const USBManagerScreen = () => {
   const {
     connected,
     uri,
-    name,
     usedBytes,
     freeBytes,
     totalBytes,
@@ -40,15 +36,15 @@ export const USBManagerScreen = () => {
   const [files, setFiles] = useState<UsbFile[]>([])
   const [busy, setBusy] = useState(false)
 
-  const loadDriveState = useCallback(async (rootUri: string) => {
+  const loadDriveState = useCallback(async (dirUri: string) => {
     const [storage, entries] = await Promise.all([
-      getStorageInfo(rootUri),
-      listDirectory(`${rootUri}/Music`),
+      getStorageInfo(dirUri),
+      listDirectory(dirUri),
     ])
 
     setConnected({
-      uri: rootUri,
-      name: 'USB Drive',
+      uri: dirUri,
+      name: 'Music Folder',
       usedBytes: storage.used,
       freeBytes: storage.free,
       totalBytes: storage.total,
@@ -60,79 +56,65 @@ export const USBManagerScreen = () => {
         .map((entry) => ({
           ...entry,
           id: `${entry.name}-${entry.size}`,
-          uri: `${rootUri}/Music/${entry.name}`,
+          uri: `${dirUri}/${entry.name}`,
         })),
     )
   }, [setConnected])
 
-  const connectWithUri = useCallback(async () => {
-    const rootUri = await requestUsbPermission()
-    await attachUsbDatabase(rootUri)
-    await loadDriveState(rootUri)
-  }, [loadDriveState])
-
   const handleConnect = useCallback(async () => {
     setBusy(true)
     try {
-      await connectWithUri()
+      const dirUri = await requestUsbPermission()
+      await loadDriveState(dirUri)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unable to connect USB drive'
-      Alert.alert('USB Error', message, [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Re-authorize',
-          onPress: async () => {
-            setBusy(true)
-            try {
-              await clearUsbPermission()
-              await connectWithUri()
-            } catch (retryErr: unknown) {
-              const retryMsg = retryErr instanceof Error ? retryErr.message : 'Authorization failed'
-              Alert.alert('USB Error', retryMsg)
-            } finally {
-              setBusy(false)
-            }
-          },
+      Alert.alert('Folder selection failed', message)
+    } finally {
+      setBusy(false)
+    }
+  }, [loadDriveState])
+
+  const handleChangeFolder = useCallback(async () => {
+    Alert.alert('Change Folder', 'Clear current folder selection and choose another?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Change',
+        onPress: async () => {
+          setBusy(true)
+          try {
+            await clearUsbPermission()
+            setFiles([])
+            setDisconnected()
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Unable to clear folder selection'
+            Alert.alert('Change folder failed', message)
+          } finally {
+            setBusy(false)
+          }
         },
-      ])
-    } finally {
-      setBusy(false)
-    }
-  }, [connectWithUri])
-
-  const handleDisconnect = useCallback(async () => {
-    setBusy(true)
-    let disconnectError: string | null = null
-
-    try {
-      await detachUsbDatabase()
-    } catch (err: unknown) {
-      const detail = err instanceof Error ? err.message : 'Unknown sync error'
-      disconnectError = `USB disconnected, but database sync before detach failed: ${detail}`
-    } finally {
-      await stopTrackPlayer().catch(() => null)
-      await resetTrackPlayer().catch(() => null)
-      usePlayerStore.getState().hide()
-      setFiles([])
-      setDisconnected()
-      setBusy(false)
-    }
-
-    if (disconnectError) {
-      Alert.alert('Disconnect warning', `${disconnectError}. Reconnect USB and verify your latest changes.`)
-    }
+      },
+    ])
   }, [setDisconnected])
 
   const handleDelete = useCallback(async (file: UsbFile) => {
     if (!uri) return
 
-    try {
-      await deleteFile(file.uri)
-      await loadDriveState(uri)
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Delete failed'
-      Alert.alert('Delete failed', message)
-    }
+    Alert.alert('Delete File', `Delete "${file.name}"? This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteFile(file.uri)
+            await loadDriveState(uri)
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Delete failed'
+            Alert.alert('Delete failed', message)
+          }
+        },
+      },
+    ])
   }, [loadDriveState, uri])
 
   return (
@@ -143,7 +125,7 @@ export const USBManagerScreen = () => {
       <View style={styles.card}>
         <View style={styles.cardRow}>
           <View style={[styles.statusDot, connected ? styles.dotOn : styles.dotOff]} />
-          <Text style={styles.cardTitle}>{connected ? name ?? 'USB Drive' : 'No drive connected'}</Text>
+          <Text style={styles.cardTitle}>{connected ? 'Music Folder Selected' : 'No folder selected'}</Text>
         </View>
 
         {connected && (
@@ -156,41 +138,25 @@ export const USBManagerScreen = () => {
         )}
 
         {!connected && (
-          <Text style={styles.hintText}>Plug in your USB flashdrive via OTG to manage files</Text>
+          <Text style={styles.hintText}>Select a folder to use for music downloads and scans.</Text>
         )}
 
         <View style={styles.actionsRow}>
           {!connected && (
             <TouchableOpacity style={styles.actionBtn} onPress={handleConnect} disabled={busy}>
-              <Text style={styles.actionBtnText}>{busy ? 'Working…' : 'Connect USB'}</Text>
-            </TouchableOpacity>
-          )}
-          {!connected && !busy && (
-            <TouchableOpacity style={styles.reauthorizeBtn} onPress={async () => {
-              setBusy(true)
-              try {
-                await clearUsbPermission()
-                await connectWithUri()
-              } catch (err: unknown) {
-                const message = err instanceof Error ? err.message : 'Authorization failed'
-                Alert.alert('USB Error', message)
-              } finally {
-                setBusy(false)
-              }
-            }}>
-              <Text style={styles.reauthorizeBtnText}>Re-authorize</Text>
+              <Text style={styles.actionBtnText}>{busy ? 'Working…' : 'Select Music Folder'}</Text>
             </TouchableOpacity>
           )}
           {connected && (
-            <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnect} disabled={busy}>
-              <Text style={styles.disconnectBtnText}>{busy ? 'Disconnecting…' : 'Disconnect'}</Text>
+            <TouchableOpacity style={styles.disconnectBtn} onPress={handleChangeFolder} disabled={busy}>
+              <Text style={styles.disconnectBtnText}>{busy ? 'Working…' : 'Change Folder'}</Text>
             </TouchableOpacity>
           )}
         </View>
       </View>
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Music/</Text>
+        <Text style={styles.sectionTitle}>Files</Text>
         <Text style={styles.sectionCount}>{files.length} files</Text>
       </View>
 
@@ -233,8 +199,6 @@ const styles = StyleSheet.create({
   actionBtnText: { color: '#fff', fontWeight: '600' },
   disconnectBtn: { backgroundColor: '#2b0d0d', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12 },
   disconnectBtnText: { color: '#f44336', fontWeight: '600' },
-  reauthorizeBtn: { backgroundColor: '#1a1a2e', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12, borderWidth: 1, borderColor: '#444' },
-  reauthorizeBtnText: { color: '#aaa', fontWeight: '600' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 6 },
   sectionTitle: { color: '#aaa', fontSize: 13, fontWeight: '600', fontFamily: 'monospace' },
   sectionCount: { color: '#555', fontSize: 12 },

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -10,33 +10,90 @@ import {
   Alert,
 } from 'react-native'
 import { formatDuration } from '../utils/helpers'
-import type { SearchResult } from '../types'
+import type { DownloadItem, SearchResult } from '../types'
 import { searchSongs } from '../services/api.service'
-import { songExistsByUrl } from '../services/database.service'
 import { downloadAndSave } from '../services/download.service'
 import { useUSBStore } from '../store/usb.store'
 import { useDownloadStore } from '../store/download.store'
+import { DownloadsScreen } from './DownloadsScreen'
 
 type SearchRow = SearchResult & {
   id: string
   alreadyOnDrive: boolean
 }
 
-const SongRow = ({ item, onDownload }: { item: SearchRow; onDownload: (item: SearchRow) => void }) => (
+const sanitizeFilename = (name: string): string => name.replace(/[/\\?%*:|"<>]/g, '-').trim()
+
+const findLatestItemForSource = (queue: DownloadItem[], sourceUrl: string): DownloadItem | undefined => {
+  for (let i = queue.length - 1; i >= 0; i -= 1) {
+    if (queue[i].song.source_url === sourceUrl) {
+      return queue[i]
+    }
+  }
+  return undefined
+}
+
+const DownloadControl = ({
+  item,
+  queueItem,
+  onDownload,
+  onOpenDownloads,
+}: {
+  item: SearchRow
+  queueItem?: DownloadItem
+  onDownload: (item: SearchRow) => void
+  onOpenDownloads: () => void
+}) => {
+  const status = queueItem?.status
+
+  if (item.alreadyOnDrive || status === 'done') {
+    return (
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>On drive</Text>
+      </View>
+    )
+  }
+
+  if (status === 'queued' || status === 'downloading' || status === 'writing') {
+    return (
+      <View style={styles.spinnerBtn}>
+        <ActivityIndicator size="small" color="#4caf50" />
+      </View>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <TouchableOpacity style={styles.errorBtn} onPress={onOpenDownloads}>
+        <Text style={styles.errorBtnText}>!</Text>
+      </TouchableOpacity>
+    )
+  }
+
+  return (
+    <TouchableOpacity style={styles.dlBtn} onPress={() => onDownload(item)}>
+      <Text style={styles.dlBtnText}>↓</Text>
+    </TouchableOpacity>
+  )
+}
+
+const SongRow = ({
+  item,
+  queueItem,
+  onDownload,
+  onOpenDownloads,
+}: {
+  item: SearchRow
+  queueItem?: DownloadItem
+  onDownload: (item: SearchRow) => void
+  onOpenDownloads: () => void
+}) => (
   <View style={styles.row}>
     <View style={styles.rowInfo}>
       <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
       <Text style={styles.rowMeta}>{item.artist} · {formatDuration(item.duration_ms)}</Text>
     </View>
-    {item.alreadyOnDrive ? (
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>On drive</Text>
-      </View>
-    ) : (
-      <TouchableOpacity style={styles.dlBtn} onPress={() => onDownload(item)}>
-        <Text style={styles.dlBtnText}>↓</Text>
-      </TouchableOpacity>
-    )}
+    <DownloadControl item={item} queueItem={queueItem} onDownload={onDownload} onOpenDownloads={onOpenDownloads} />
   </View>
 )
 
@@ -45,9 +102,19 @@ export const SearchScreen = () => {
   const [searching, setSearching] = useState(false)
   const [results, setResults] = useState<SearchRow[]>([])
   const [searched, setSearched] = useState(false)
+  const [downloadsVisible, setDownloadsVisible] = useState(false)
+
   const usbUri = useUSBStore((state) => state.uri)
+  const cachedFilenames = useUSBStore((state) => state.cachedFilenames)
+  const setCachedFilenames = useUSBStore((state) => state.setCachedFilenames)
+  const queue = useDownloadStore((state) => state.queue)
   const addToQueue = useDownloadStore((state) => state.addToQueue)
   const updateItem = useDownloadStore((state) => state.updateItem)
+
+  const activeCount = useMemo(
+    () => queue.filter((item) => item.status === 'queued' || item.status === 'downloading' || item.status === 'writing').length,
+    [queue],
+  )
 
   const handleSearch = async () => {
     const normalized = query.trim()
@@ -58,13 +125,14 @@ export const SearchScreen = () => {
 
     try {
       const remoteResults = await searchSongs(normalized)
-      const hydrated = await Promise.all(
-        remoteResults.map(async (item, index) => ({
+      const hydrated = remoteResults.map((item, index) => {
+        const filename = sanitizeFilename(`${item.artist} - ${item.title}.mp3`)
+        return {
           ...item,
           id: `${item.source_url}-${index}`,
-          alreadyOnDrive: await songExistsByUrl(item.source_url),
-        })),
-      )
+          alreadyOnDrive: cachedFilenames.has(filename),
+        }
+      })
       setResults(hydrated)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Search failed'
@@ -78,7 +146,7 @@ export const SearchScreen = () => {
 
   const handleDownload = async (item: SearchRow) => {
     if (!usbUri) {
-      Alert.alert('USB not connected', 'Connect your USB drive before downloading.')
+      Alert.alert('Folder required', 'Select a music folder first in the USB tab.')
       return
     }
 
@@ -97,6 +165,12 @@ export const SearchScreen = () => {
         updateItem(queueId, { progress, status })
       })
       updateItem(queueId, { status: 'done', progress: 1 })
+
+      const filename = sanitizeFilename(`${item.artist} - ${item.title}.mp3`)
+      const next = new Set(cachedFilenames)
+      next.add(filename)
+      setCachedFilenames(next)
+
       setResults((prev) => prev.map((row) => (row.id === item.id ? { ...row, alreadyOnDrive: true } : row)))
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Download failed'
@@ -107,12 +181,22 @@ export const SearchScreen = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Search</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>Search</Text>
+        <TouchableOpacity style={styles.downloadsButton} onPress={() => setDownloadsVisible(true)}>
+          <Text style={styles.downloadsButtonText}>⬇ Downloads</Text>
+          {activeCount > 0 && (
+            <View style={styles.downloadsBadge}>
+              <Text style={styles.downloadsBadgeText}>{activeCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
-          placeholder="Song name or YouTube URL…"
+          placeholder="Song name or YouTube URL..."
           placeholderTextColor="#555"
           value={query}
           onChangeText={setQuery}
@@ -129,7 +213,7 @@ export const SearchScreen = () => {
       {searching && (
         <View style={styles.centered}>
           <ActivityIndicator color="#4caf50" />
-          <Text style={styles.hintText}>Searching YouTube…</Text>
+          <Text style={styles.hintText}>Searching YouTube...</Text>
         </View>
       )}
 
@@ -149,18 +233,58 @@ export const SearchScreen = () => {
         <FlatList
           data={results}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <SongRow item={item} onDownload={handleDownload} />}
+          renderItem={({ item }) => (
+            <SongRow
+              item={item}
+              queueItem={findLatestItemForSource(queue, item.source_url)}
+              onDownload={handleDownload}
+              onOpenDownloads={() => setDownloadsVisible(true)}
+            />
+          )}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
+
+      <DownloadsScreen visible={downloadsVisible} onClose={() => setDownloadsVisible(false)} />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#111' },
-  header: { fontSize: 22, fontWeight: '700', color: '#fff', paddingHorizontal: 16, paddingTop: 20, paddingBottom: 12 },
+  headerRow: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  header: { fontSize: 22, fontWeight: '700', color: '#fff' },
+  downloadsButton: {
+    borderWidth: 1,
+    borderColor: '#3a3a3a',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    position: 'relative',
+  },
+  downloadsButtonText: { color: '#ddd', fontSize: 12, fontWeight: '600' },
+  downloadsBadge: {
+    position: 'absolute',
+    right: -6,
+    top: -6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#4caf50',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  downloadsBadgeText: { color: '#111', fontSize: 11, fontWeight: '700' },
   inputRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 12 },
   input: {
     flex: 1,
@@ -187,4 +311,16 @@ const styles = StyleSheet.create({
   badgeText: { color: '#4caf50', fontSize: 11, fontWeight: '600' },
   dlBtn: { backgroundColor: '#4caf50', borderRadius: 6, width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   dlBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  spinnerBtn: {
+    borderRadius: 6,
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#2f4a2f',
+    backgroundColor: '#172217',
+  },
+  errorBtn: { backgroundColor: '#3a1515', borderRadius: 6, width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#8a2f2f' },
+  errorBtnText: { color: '#ff6b6b', fontSize: 18, fontWeight: '700' },
 })

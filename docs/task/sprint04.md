@@ -2,7 +2,7 @@
 
 ## Status
 
-Planning. Pending final decision on `readFile` method (see open decisions).
+Implemented and validated in the sprint branch. `readFile` removal is complete.
 
 ## Sprint Metadata
 
@@ -48,7 +48,6 @@ The current app has several critical runtime failures and complexity that must b
 
 ### Out of scope
 
-- `readFile` method — pending decision (see Open Decisions)
 - Cloud sync
 - iOS support
 - Backend changes
@@ -235,6 +234,7 @@ Implementation:
 - Replace `Song` interface with new slim version (above)
 - Remove `Playlist` interface
 - Keep: `SearchResult`, `PlaylistInfo`, `USBState`, `DownloadItem`, `DownloadStatus`
+  - Note: `PlaylistInfo` is retained only as a backend response type for `/playlist-info`. Playlist persistence/UI is removed from mobile in Sprint 04.
 - Add `cachedFilenames: Set<string>` to `USBState`
 
 ### `mobile/src/screens/LibraryScreen.tsx` — **rewritten**
@@ -418,7 +418,7 @@ Steps 1–5 must complete before 6–9. Steps 6–9 can parallelize. Steps 10–
 
 ## Open Decisions
 
-None. All decisions resolved.
+None.
 
 ---
 

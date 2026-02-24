@@ -6,12 +6,10 @@ type UsbModule = {
   requestPermission: () => Promise<string>
   clearPermission: () => Promise<void>
   listDirectory: (uri: string) => Promise<FileEntry[]>
-  writeFile: (destUri: string, sourcePath: string) => Promise<void>
-  readFile: (sourceUri: string, destPath: string) => Promise<void>
+  writeFile: (dirUri: string, filename: string, sourcePath: string) => Promise<void>
+  renameFile: (fileUri: string, newName: string) => Promise<string>
   deleteFile: (uri: string) => Promise<void>
   getStorageInfo: (uri: string) => Promise<StorageInfo>
-  copyDatabase: (usbRootUri: string, destPath: string) => Promise<void>
-  syncDatabase: (sourcePath: string, usbRootUri: string) => Promise<void>
 }
 
 export class UsbServiceError extends Error {
@@ -69,16 +67,17 @@ export const listDirectory = (uri: string): Promise<FileEntry[]> => {
   return getUsbModule().listDirectory(uri)
 }
 
-export const writeFile = (destUri: string, sourcePath: string): Promise<void> => {
-  assertSafUri(destUri, 'Destination URI')
+export const writeFile = (dirUri: string, filename: string, sourcePath: string): Promise<void> => {
+  assertSafUri(dirUri, 'Directory URI')
+  assertNonEmpty(filename, 'Filename')
   assertNonEmpty(sourcePath, 'Source path')
-  return getUsbModule().writeFile(destUri, sourcePath)
+  return getUsbModule().writeFile(dirUri, filename, sourcePath)
 }
 
-export const readFile = (sourceUri: string, destPath: string): Promise<void> => {
-  assertSafUri(sourceUri, 'Source URI')
-  assertNonEmpty(destPath, 'Destination path')
-  return getUsbModule().readFile(sourceUri, destPath)
+export const renameFile = (fileUri: string, newName: string): Promise<string> => {
+  assertSafUri(fileUri, 'File URI')
+  assertNonEmpty(newName, 'New filename')
+  return getUsbModule().renameFile(fileUri, newName)
 }
 
 export const deleteFile = (uri: string): Promise<void> => {
@@ -89,16 +88,4 @@ export const deleteFile = (uri: string): Promise<void> => {
 export const getStorageInfo = (uri: string): Promise<StorageInfo> => {
   assertSafUri(uri, 'Storage URI')
   return getUsbModule().getStorageInfo(uri)
-}
-
-export const copyDatabase = (usbRootUri: string, destPath: string): Promise<void> => {
-  assertSafUri(usbRootUri, 'USB root URI')
-  assertNonEmpty(destPath, 'Database destination path')
-  return getUsbModule().copyDatabase(usbRootUri, destPath)
-}
-
-export const syncDatabase = (sourcePath: string, usbRootUri: string): Promise<void> => {
-  assertNonEmpty(sourcePath, 'Database source path')
-  assertSafUri(usbRootUri, 'USB root URI')
-  return getUsbModule().syncDatabase(sourcePath, usbRootUri)
 }
