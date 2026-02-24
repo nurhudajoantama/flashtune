@@ -8,48 +8,60 @@ export const downloadRoutes = async (app: FastifyInstance) => {
     const normalizedUrl = url?.trim()
     if (!normalizedUrl) return reply.status(400).send({ error: 'url is required' })
 
-    const proc = streamDownload(normalizedUrl)
+    const { ytdlp, ffmpeg } = streamDownload(normalizedUrl)
     let clientDisconnected = false
     let streamStarted = false
-    let stderr = ''
+    let ytdlpStderr = ''
 
-    proc.stdout.once('data', () => {
+    ffmpeg.stdout.once('data', () => {
       streamStarted = true
     })
 
-    proc.stderr.on('data', (d) => {
-      stderr += d.toString()
+    ytdlp.stderr.on('data', (d) => {
+      ytdlpStderr += d.toString()
       app.log.warn(`yt-dlp: ${d}`)
     })
 
-    proc.once('error', (err: NodeJS.ErrnoException) => {
-      if (clientDisconnected || reply.sent) return
+    ffmpeg.stderr.on('data', (d) => {
+      app.log.warn(`ffmpeg: ${d}`)
+    })
 
+    ytdlp.once('error', (err: NodeJS.ErrnoException) => {
+      if (clientDisconnected || reply.sent) return
       if (err.code === 'ENOENT') {
         return reply.status(500).send({ error: 'yt-dlp executable not found on server PATH' })
       }
-
       return reply.status(500).send({ error: err.message })
     })
 
-    proc.once('close', (code) => {
-      if (clientDisconnected || code === 0) return
+    ffmpeg.once('error', (err: NodeJS.ErrnoException) => {
+      if (clientDisconnected || reply.sent) return
+      if (err.code === 'ENOENT') {
+        return reply.status(500).send({ error: 'ffmpeg executable not found on server PATH' })
+      }
+      if (!streamStarted) {
+        return reply.status(500).send({ error: err.message })
+      }
+      app.log.error({ err }, 'ffmpeg error after stream started')
+    })
 
-      const reason = stderr.trim() || 'yt-dlp download failed'
+    ffmpeg.once('close', (code) => {
+      if (clientDisconnected || code === 0) return
+      const reason = ytdlpStderr.trim() || 'download or audio conversion failed'
       if (!streamStarted && !reply.sent) {
         void reply.status(422).send({ error: reason })
         return
       }
-
-      app.log.warn({ code, reason }, 'yt-dlp exited with non-zero status after streaming started')
+      app.log.warn({ code, reason }, 'ffmpeg exited with non-zero status after streaming started')
     })
 
     request.raw.on('close', () => {
       clientDisconnected = true
-      if (!proc.killed) proc.kill()
+      if (!ytdlp.killed) ytdlp.kill()
+      if (!ffmpeg.killed) ffmpeg.kill()
     })
 
     reply.header('Content-Type', 'audio/mpeg')
-    return reply.send(proc.stdout)
+    return reply.send(ffmpeg.stdout)
   })
 }

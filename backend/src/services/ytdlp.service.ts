@@ -1,6 +1,13 @@
 import { spawn } from 'child_process'
+import type { ChildProcess } from 'child_process'
 
 const YTDLP = process.env.YTDLP_PATH ?? 'yt-dlp'
+const FFMPEG = process.env.FFMPEG_PATH ?? 'ffmpeg'
+
+export interface StreamProcesses {
+  ytdlp: ChildProcess
+  ffmpeg: ChildProcess
+}
 
 export class YtDlpError extends Error {
   readonly statusCode: number
@@ -84,15 +91,45 @@ export const search = (query: string): Promise<YtSearchResult[]> => {
   ).then((lines) => lines.map(parseEntry).filter((item) => item.source_url.length > 0))
 }
 
-export const streamDownload = (url: string) => {
-  return spawn(YTDLP, [
-    '-x',
-    '--audio-format', 'mp3',
-    '--audio-quality', '0',
+export const streamDownload = (url: string): StreamProcesses => {
+  // yt-dlp -x --audio-format mp3 -o - does NOT reliably pipe the converted MP3
+  // to stdout — it streams the raw container (WebM/opus, m4a, etc.) instead.
+  // Fix: yt-dlp pipes raw best-audio to ffmpeg, which converts to MP3 on the fly.
+  const ytdlp = spawn(YTDLP, [
+    '-f', 'bestaudio',
     '-o', '-',
     '--no-playlist',
+    '-q',
     url,
   ])
+
+  const ffmpeg = spawn(FFMPEG, [
+    '-i', 'pipe:0',
+    '-vn',
+    '-f', 'mp3',
+    '-q:a', '0',
+    'pipe:1',
+    '-loglevel', 'error',
+  ])
+
+  ytdlp.stdout.pipe(ffmpeg.stdin)
+
+  // Suppress EPIPE errors when ytdlp fails and stdin is destroyed
+  ffmpeg.stdin.on('error', () => {})
+
+  ytdlp.once('close', (code) => {
+    if (code !== 0) {
+      ffmpeg.stdin.destroy()
+    } else {
+      ffmpeg.stdin.end()
+    }
+  })
+
+  ytdlp.once('error', () => {
+    ffmpeg.stdin.destroy()
+  })
+
+  return { ytdlp, ffmpeg }
 }
 
 export const getPlaylistInfo = (url: string): Promise<{ title: string; entries: YtSearchResult[] }> => {
