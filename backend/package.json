@@ -4,7 +4,7 @@
   "description": "FlashTune backend — Fastify API with yt-dlp for YouTube MP3 downloads",
   "main": "dist/index.js",
   "scripts": {
-    "start": "tsx src/index.ts",
+    "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "build": "tsc"
   },
