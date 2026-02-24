@@ -3,6 +3,7 @@ import cors from '@fastify/cors'
 import { searchRoutes } from './routes/search'
 import { downloadRoutes } from './routes/download'
 import { playlistRoutes } from './routes/playlist'
+import { getAuthReadiness, loadTokenAuthConfig } from './config/token-auth'
 
 const app = Fastify({ logger: true })
 
@@ -11,13 +12,18 @@ app.register(searchRoutes)
 app.register(downloadRoutes)
 app.register(playlistRoutes)
 
-app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
+app.get('/health', async () => ({
+  status: 'ok',
+  timestamp: new Date().toISOString(),
+  ...getAuthReadiness()
+}))
 
 const start = async () => {
   try {
+    loadTokenAuthConfig()
     await app.listen({ port: Number(process.env.PORT ?? 3000), host: '0.0.0.0' })
   } catch (err) {
-    app.log.error(err)
+    app.log.error({ err }, 'Backend startup failed')
     process.exit(1)
   }
 }
