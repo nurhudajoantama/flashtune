@@ -1,6 +1,8 @@
 import React, { useCallback, useState } from 'react'
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native'
+import TrackPlayer from 'react-native-track-player'
 import { useUSBStore } from '../store/usb.store'
+import { usePlayerStore } from '../store/player.store'
 import { formatBytes } from '../utils/helpers'
 import {
   deleteFile,
@@ -77,9 +79,26 @@ export const USBManagerScreen = () => {
   }, [loadDriveState])
 
   const handleDisconnect = useCallback(async () => {
-    await detachUsbDatabase().catch(() => null)
-    setFiles([])
-    setDisconnected()
+    setBusy(true)
+    let disconnectError: string | null = null
+
+    try {
+      await detachUsbDatabase()
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : 'Unknown sync error'
+      disconnectError = `USB disconnected, but database sync before detach failed: ${detail}`
+    } finally {
+      await TrackPlayer.stop().catch(() => null)
+      await TrackPlayer.reset().catch(() => null)
+      usePlayerStore.getState().hide()
+      setFiles([])
+      setDisconnected()
+      setBusy(false)
+    }
+
+    if (disconnectError) {
+      Alert.alert('Disconnect warning', `${disconnectError}. Reconnect USB and verify your latest changes.`)
+    }
   }, [setDisconnected])
 
   const handleDelete = useCallback(async (file: UsbFile) => {
@@ -120,11 +139,11 @@ export const USBManagerScreen = () => {
 
         <View style={styles.actionsRow}>
           <TouchableOpacity style={styles.actionBtn} onPress={handleConnect} disabled={busy}>
-            <Text style={styles.actionBtnText}>{busy ? 'Connecting…' : 'Connect USB'}</Text>
+            <Text style={styles.actionBtnText}>{busy ? 'Working…' : 'Connect USB'}</Text>
           </TouchableOpacity>
           {connected && (
-            <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnect}>
-              <Text style={styles.disconnectBtnText}>Disconnect</Text>
+            <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnect} disabled={busy}>
+              <Text style={styles.disconnectBtnText}>{busy ? 'Disconnecting…' : 'Disconnect'}</Text>
             </TouchableOpacity>
           )}
         </View>

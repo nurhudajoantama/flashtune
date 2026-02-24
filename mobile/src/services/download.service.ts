@@ -27,7 +27,9 @@ export const downloadAndSave = async (
     await RNFS.writeFile(tempPath, arrayBufferToBase64(buffer), 'base64')
 
     onProgress?.(0.75)
-    await writeFile(`${usbRootUri}/Music/${filename}`, tempPath)
+    await writeFile(`${usbRootUri}/Music/${filename}`, tempPath).catch((err: unknown) => {
+      throw new Error(formatUsbWriteError(err))
+    })
 
     onProgress?.(0.9)
     await insertSong({
@@ -39,6 +41,8 @@ export const downloadAndSave = async (
       filename,
       download_date: new Date().toISOString(),
       duration_ms: result.duration_ms,
+    }).catch((err: unknown) => {
+      throw new Error(formatDatabaseSyncError(err))
     })
 
     if (!(await RNFS.exists(dbPath))) {
@@ -53,6 +57,49 @@ export const downloadAndSave = async (
 
 const sanitizeFilename = (name: string): string =>
   name.replace(/[/\\?%*:|"<>]/g, '-').trim()
+
+const toMessage = (err: unknown): string => {
+  if (err instanceof Error) {
+    return err.message
+  }
+
+  if (typeof err === 'string') {
+    return err
+  }
+
+  return 'Unknown error'
+}
+
+const formatUsbWriteError = (err: unknown): string => {
+  const detail = toMessage(err)
+  const normalized = detail.toLowerCase()
+  const looksDisconnected = normalized.includes('not found')
+    || normalized.includes('no such file')
+    || normalized.includes('disconnected')
+    || normalized.includes('saf')
+    || normalized.includes('permission')
+
+  if (looksDisconnected) {
+    return 'USB write failed. The drive may be disconnected or permission expired. Reconnect USB in USB Manager, then retry download.'
+  }
+
+  return `USB write failed while saving the file: ${detail}`
+}
+
+const formatDatabaseSyncError = (err: unknown): string => {
+  const detail = toMessage(err)
+  const normalized = detail.toLowerCase()
+  const looksSyncFailure = normalized.includes('sync')
+    || normalized.includes('permission')
+    || normalized.includes('saf')
+    || normalized.includes('disconnected')
+
+  if (looksSyncFailure) {
+    return 'Track file was copied, but database sync to USB failed. Keep USB connected and reconnect it in USB Manager to resync before next download.'
+  }
+
+  return `Database update failed after file copy: ${detail}`
+}
 
 const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
