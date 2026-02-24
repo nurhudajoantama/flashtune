@@ -1,0 +1,32 @@
+{
+  "name": "flashtune-mobile-tmp",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@react-native-community/netinfo": "^12.0.1",
+    "@react-navigation/bottom-tabs": "^7.14.0",
+    "@react-navigation/native": "^7.1.28",
+    "@react-navigation/stack": "^7.7.2",
+    "axios": "^1.13.5",
+    "expo": "~54.0.33",
+    "expo-status-bar": "~3.0.9",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-fs": "^2.20.0",
+    "react-native-gesture-handler": "^2.30.0",
+    "react-native-safe-area-context": "^5.6.2",
+    "react-native-screens": "^4.24.0",
+    "react-native-track-player": "^4.1.2",
+    "zustand": "^5.0.11"
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/react-native-fs": "^2.8.3"
+  }
+}
