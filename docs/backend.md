@@ -15,13 +15,6 @@ Acceptance baseline:
 - `/download` streams bytes without temp files.
 - yt-dlp failures are mapped to deterministic status codes.
 
-Sprint 02 planned auth extension:
-- Support YAML-defined multi-token list with enabled/disabled entries.
-
-Implemented in Sprint 02:
-- backend reads token config from YAML and validates enabled token list.
-- auth continues using `X-API-Key` header against YAML token set.
-
 ## Tech Stack
 
 | | Choice |
@@ -164,23 +157,8 @@ Streaming lifecycle:
 
 Single static key in `.env` as `API_KEY`. Client sends as `X-API-Key` header.
 
-Planned auth v2 contract (Sprint 02):
-
-- Config source: `backend/config/tokens.yaml` (override with `TOKEN_CONFIG_PATH`).
-- Header remains unchanged: `X-API-Key`.
-- Backend validates key against YAML `token_list` (enabled tokens only).
-
-Config files:
-- `backend/config/tokens.yaml` (runtime)
-- `backend/config/tokens.yaml.example` (sample)
-
-Planned auth errors:
-- `401`: missing/invalid/disabled token
-- `500`: auth config invalid/unreadable
-
-Health payload extension:
-- `auth_config_loaded`: boolean
-- `auth_mode`: `yaml-only` | `yaml-with-legacy-fallback`
+Auth errors:
+- `401`: missing or wrong key
 
 ## Error Handling
 
@@ -216,8 +194,6 @@ Status mapping:
 API_KEY=<random static key>
 PORT=3000
 YTDLP_PATH=yt-dlp   # or absolute path
-TOKEN_AUTH_MODE=yaml-only
-TOKEN_CONFIG_PATH=./config/tokens.yaml
 ```
 
 ## Dockerfile Requirements
