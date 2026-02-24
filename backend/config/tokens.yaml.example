@@ -1,0 +1,8 @@
+version: 1
+token_list:
+  - name: mobile-dev
+    token: replace-with-token-1
+    enabled: true
+  - name: temporary-disabled
+    token: replace-with-token-2
+    enabled: false
