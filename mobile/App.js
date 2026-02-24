@@ -1,5 +1,5 @@
 import 'react-native-gesture-handler'
-import React from 'react'
+import React, { useEffect } from 'react'
 import { NavigationContainer } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
@@ -11,6 +11,7 @@ import { SearchScreen } from './src/screens/SearchScreen'
 import { LibraryScreen } from './src/screens/LibraryScreen'
 import { USBManagerScreen } from './src/screens/USBManagerScreen'
 import { SettingsScreen } from './src/screens/SettingsScreen'
+import { initDatabase } from './src/services/database.service'
 
 const Tab = createBottomTabNavigator()
 
@@ -23,6 +24,10 @@ const TabIcon = ({ label, focused }) => (
 )
 
 export default function App() {
+  useEffect(() => {
+    void initDatabase()
+  }, [])
+
   return (
     <SafeAreaProvider>
       <StatusBar style="light" backgroundColor="#000" />

@@ -1,21 +1,17 @@
-import React from 'react'
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native'
+import React, { useCallback, useState } from 'react'
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native'
 import { useUSBStore } from '../store/usb.store'
 import { formatBytes } from '../utils/helpers'
+import {
+  deleteFile,
+  getStorageInfo,
+  listDirectory,
+  requestUsbPermission,
+  type FileEntry,
+} from '../services/usb.service'
+import { attachUsbDatabase, detachUsbDatabase } from '../services/database.service'
 
-interface MockFile {
-  id: string
-  name: string
-  size: number
-}
-
-const MOCK_FILES: MockFile[] = [
-  { id: '1', name: 'bohemian-rhapsody.mp3', size: 8_540_000 },
-  { id: '2', name: 'hotel-california.mp3', size: 9_120_000 },
-  { id: '3', name: 'stairway-to-heaven.mp3', size: 11_300_000 },
-  { id: '4', name: 'smells-like-teen-spirit.mp3', size: 7_200_000 },
-  { id: '5', name: 'sweet-child-o-mine.mp3', size: 8_650_000 },
-]
+type UsbFile = FileEntry & { id: string; uri: string }
 
 const StorageBar = ({ used, total }: { used: number; total: number }) => {
   const pct = total > 0 ? Math.min(used / total, 1) : 0
@@ -28,7 +24,75 @@ const StorageBar = ({ used, total }: { used: number; total: number }) => {
 }
 
 export const USBManagerScreen = () => {
-  const { connected, name, usedBytes, freeBytes, totalBytes } = useUSBStore()
+  const {
+    connected,
+    uri,
+    name,
+    usedBytes,
+    freeBytes,
+    totalBytes,
+    setConnected,
+    setDisconnected,
+  } = useUSBStore()
+  const [files, setFiles] = useState<UsbFile[]>([])
+  const [busy, setBusy] = useState(false)
+
+  const loadDriveState = useCallback(async (rootUri: string) => {
+    const [storage, entries] = await Promise.all([
+      getStorageInfo(rootUri),
+      listDirectory(`${rootUri}/Music`),
+    ])
+
+    setConnected({
+      uri: rootUri,
+      name: 'USB Drive',
+      usedBytes: storage.used,
+      freeBytes: storage.free,
+      totalBytes: storage.total,
+    })
+
+    setFiles(
+      entries
+        .filter((entry) => !entry.isDirectory)
+        .map((entry) => ({
+          ...entry,
+          id: `${entry.name}-${entry.size}`,
+          uri: `${rootUri}/Music/${entry.name}`,
+        })),
+    )
+  }, [setConnected])
+
+  const handleConnect = useCallback(async () => {
+    setBusy(true)
+    try {
+      const rootUri = await requestUsbPermission()
+      await attachUsbDatabase(rootUri)
+      await loadDriveState(rootUri)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unable to connect USB drive'
+      Alert.alert('USB error', message)
+    } finally {
+      setBusy(false)
+    }
+  }, [loadDriveState])
+
+  const handleDisconnect = useCallback(async () => {
+    await detachUsbDatabase().catch(() => null)
+    setFiles([])
+    setDisconnected()
+  }, [setDisconnected])
+
+  const handleDelete = useCallback(async (file: UsbFile) => {
+    if (!uri) return
+
+    try {
+      await deleteFile(file.uri)
+      await loadDriveState(uri)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Delete failed'
+      Alert.alert('Delete failed', message)
+    }
+  }, [loadDriveState, uri])
 
   return (
     <View style={styles.container}>
@@ -53,23 +117,33 @@ export const USBManagerScreen = () => {
         {!connected && (
           <Text style={styles.hintText}>Plug in your USB flashdrive via OTG to manage files</Text>
         )}
+
+        <View style={styles.actionsRow}>
+          <TouchableOpacity style={styles.actionBtn} onPress={handleConnect} disabled={busy}>
+            <Text style={styles.actionBtnText}>{busy ? 'Connecting…' : 'Connect USB'}</Text>
+          </TouchableOpacity>
+          {connected && (
+            <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnect}>
+              <Text style={styles.disconnectBtnText}>Disconnect</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      {/* File list — always show mock for skeleton */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Music/</Text>
-        <Text style={styles.sectionCount}>{MOCK_FILES.length} files</Text>
+        <Text style={styles.sectionCount}>{files.length} files</Text>
       </View>
 
       <FlatList
-        data={MOCK_FILES}
+        data={files}
         keyExtractor={(f) => f.id}
         renderItem={({ item }) => (
           <View style={styles.fileRow}>
             <Text style={styles.fileName} numberOfLines={1}>{item.name}</Text>
             <View style={styles.fileRight}>
               <Text style={styles.fileSize}>{formatBytes(item.size)}</Text>
-              <TouchableOpacity onPress={() => console.log('Delete', item.id)} style={styles.deleteBtn}>
+              <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteBtn}>
                 <Text style={styles.deleteBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -95,6 +169,11 @@ const styles = StyleSheet.create({
   storageBarFill: { backgroundColor: '#4caf50', borderRadius: 3 },
   storageText: { color: '#777', fontSize: 12 },
   hintText: { color: '#555', fontSize: 13, marginTop: 4 },
+  actionsRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  actionBtn: { backgroundColor: '#4caf50', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12 },
+  actionBtnText: { color: '#fff', fontWeight: '600' },
+  disconnectBtn: { backgroundColor: '#2b0d0d', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12 },
+  disconnectBtnText: { color: '#f44336', fontWeight: '600' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 6 },
   sectionTitle: { color: '#aaa', fontSize: 13, fontWeight: '600', fontFamily: 'monospace' },
   sectionCount: { color: '#555', fontSize: 12 },

@@ -8,16 +8,17 @@ import {
   ScrollView,
   Alert,
 } from 'react-native'
+import { configureApi, getApiConfig } from '../services/api.service'
 
 const PLACEHOLDER_VERSION = '1.0.0 (build 1)'
 
 export const SettingsScreen = () => {
-  const [backendUrl, setBackendUrl] = useState('http://192.168.1.100:3000')
-  const [apiKey, setApiKey] = useState('')
+  const initialConfig = getApiConfig()
+  const [backendUrl, setBackendUrl] = useState(initialConfig.baseURL)
+  const [apiKey, setApiKey] = useState(initialConfig.apiKey)
 
   const handleSave = () => {
-    // TODO: persist to AsyncStorage / env config
-    console.log('Save settings', { backendUrl, apiKey })
+    configureApi({ baseURL: backendUrl.trim(), apiKey: apiKey.trim() })
     Alert.alert('Saved', 'Settings updated.')
   }
 

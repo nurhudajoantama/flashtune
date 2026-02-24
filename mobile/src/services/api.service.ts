@@ -1,9 +1,33 @@
 import axios from 'axios'
 import type { SearchResult, PlaylistInfo } from '../types'
 
-const api = axios.create({
-  baseURL: process.env.BACKEND_URL,
-  headers: { 'X-API-Key': process.env.API_KEY },
+const runtimeConfig = {
+  baseURL: process.env.BACKEND_URL ?? 'http://127.0.0.1:3000',
+  apiKey: process.env.API_KEY ?? '',
+}
+
+const api = axios.create()
+
+const syncClientConfig = (): void => {
+  api.defaults.baseURL = runtimeConfig.baseURL
+  api.defaults.headers.common['X-API-Key'] = runtimeConfig.apiKey
+}
+
+syncClientConfig()
+
+export const configureApi = (config: { baseURL?: string; apiKey?: string }): void => {
+  if (config.baseURL !== undefined) {
+    runtimeConfig.baseURL = config.baseURL
+  }
+  if (config.apiKey !== undefined) {
+    runtimeConfig.apiKey = config.apiKey
+  }
+  syncClientConfig()
+}
+
+export const getApiConfig = (): { baseURL: string; apiKey: string } => ({
+  baseURL: runtimeConfig.baseURL,
+  apiKey: runtimeConfig.apiKey,
 })
 
 export const searchSongs = async (query: string): Promise<SearchResult[]> => {

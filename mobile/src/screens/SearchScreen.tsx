@@ -7,27 +7,22 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from 'react-native'
 import { formatDuration } from '../utils/helpers'
+import type { SearchResult } from '../types'
+import { searchSongs } from '../services/api.service'
+import { songExistsByUrl } from '../services/database.service'
+import { downloadAndSave } from '../services/download.service'
+import { useUSBStore } from '../store/usb.store'
+import { useDownloadStore } from '../store/download.store'
 
-interface MockResult {
+type SearchRow = SearchResult & {
   id: string
-  title: string
-  artist: string
-  duration_ms: number
-  source_url: string
   alreadyOnDrive: boolean
 }
 
-const MOCK_RESULTS: MockResult[] = [
-  { id: '1', title: 'Bohemian Rhapsody', artist: 'Queen', duration_ms: 354000, source_url: 'https://youtube.com/watch?v=fJ9rUzIMcZQ', alreadyOnDrive: true },
-  { id: '2', title: 'Hotel California', artist: 'Eagles', duration_ms: 391000, source_url: 'https://youtube.com/watch?v=lp-EO5I60KA', alreadyOnDrive: false },
-  { id: '3', title: 'Stairway to Heaven', artist: 'Led Zeppelin', duration_ms: 482000, source_url: 'https://youtube.com/watch?v=QkF3oxziUI4', alreadyOnDrive: false },
-  { id: '4', title: 'Smells Like Teen Spirit', artist: 'Nirvana', duration_ms: 301000, source_url: 'https://youtube.com/watch?v=hTWKbfoikeg', alreadyOnDrive: true },
-  { id: '5', title: 'Sweet Child O Mine', artist: "Guns N' Roses", duration_ms: 356000, source_url: 'https://youtube.com/watch?v=1w7OgIMMRc4', alreadyOnDrive: false },
-]
-
-const SongRow = ({ item, onDownload }: { item: MockResult; onDownload: (id: string) => void }) => (
+const SongRow = ({ item, onDownload }: { item: SearchRow; onDownload: (item: SearchRow) => void }) => (
   <View style={styles.row}>
     <View style={styles.rowInfo}>
       <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
@@ -38,7 +33,7 @@ const SongRow = ({ item, onDownload }: { item: MockResult; onDownload: (id: stri
         <Text style={styles.badgeText}>On drive</Text>
       </View>
     ) : (
-      <TouchableOpacity style={styles.dlBtn} onPress={() => onDownload(item.id)}>
+      <TouchableOpacity style={styles.dlBtn} onPress={() => onDownload(item)}>
         <Text style={styles.dlBtnText}>↓</Text>
       </TouchableOpacity>
     )}
@@ -48,24 +43,66 @@ const SongRow = ({ item, onDownload }: { item: MockResult; onDownload: (id: stri
 export const SearchScreen = () => {
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
-  const [results, setResults] = useState<MockResult[]>([])
+  const [results, setResults] = useState<SearchRow[]>([])
   const [searched, setSearched] = useState(false)
+  const usbUri = useUSBStore((state) => state.uri)
+  const addToQueue = useDownloadStore((state) => state.addToQueue)
+  const updateItem = useDownloadStore((state) => state.updateItem)
 
-  const handleSearch = () => {
-    if (!query.trim()) return
+  const handleSearch = async () => {
+    const normalized = query.trim()
+    if (!normalized) return
+
     setSearching(true)
     setSearched(false)
-    // Mock: simulate network delay then show results
-    setTimeout(() => {
-      setResults(MOCK_RESULTS)
+
+    try {
+      const remoteResults = await searchSongs(normalized)
+      const hydrated = await Promise.all(
+        remoteResults.map(async (item, index) => ({
+          ...item,
+          id: `${item.source_url}-${index}`,
+          alreadyOnDrive: await songExistsByUrl(item.source_url),
+        })),
+      )
+      setResults(hydrated)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Search failed'
+      Alert.alert('Search failed', message)
+      setResults([])
+    } finally {
       setSearching(false)
       setSearched(true)
-    }, 800)
+    }
   }
 
-  const handleDownload = (id: string) => {
-    // TODO: trigger download via download.service
-    console.log('Download triggered for id:', id)
+  const handleDownload = async (item: SearchRow) => {
+    if (!usbUri) {
+      Alert.alert('USB not connected', 'Connect your USB drive before downloading.')
+      return
+    }
+
+    const queueId = `${item.source_url}-${Date.now()}`
+    addToQueue({
+      id: queueId,
+      song: item,
+      status: 'queued',
+      progress: 0,
+    })
+
+    try {
+      updateItem(queueId, { status: 'downloading', progress: 0.05 })
+      await downloadAndSave(item, usbUri, (progress) => {
+        const status = progress >= 0.75 ? 'writing' : 'downloading'
+        updateItem(queueId, { progress, status })
+      })
+      updateItem(queueId, { status: 'done', progress: 1 })
+      setResults((prev) => prev.map((row) => (row.id === item.id ? { ...row, alreadyOnDrive: true } : row)))
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Download failed'
+      updateItem(queueId, { status: 'error', error: message })
+      Alert.alert('Download failed', message)
+    }
   }
 
   return (
