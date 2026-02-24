@@ -214,6 +214,10 @@ Planned Sprint 02 additions:
 - Persist `backend_url` and `api_key` locally.
 - Hydrate settings from persisted storage at app startup.
 
+Implemented in Sprint 02:
+- settings save now persists backend URL + API key.
+- app bootstrap hydrates persisted API config before normal runtime calls.
+
 ### Library screen
 - Currently skeleton sort/filter/action-sheet UI.
 - Full data binding to DB service remains planned follow-up.

@@ -18,6 +18,10 @@ Acceptance baseline:
 Sprint 02 planned auth extension:
 - Support YAML-defined multi-token list with enabled/disabled entries.
 
+Implemented in Sprint 02:
+- backend reads token config from YAML and validates enabled token list.
+- auth continues using `X-API-Key` header against YAML token set.
+
 ## Tech Stack
 
 | | Choice |
@@ -166,9 +170,17 @@ Planned auth v2 contract (Sprint 02):
 - Header remains unchanged: `X-API-Key`.
 - Backend validates key against YAML `token_list` (enabled tokens only).
 
+Config files:
+- `backend/config/tokens.yaml` (runtime)
+- `backend/config/tokens.yaml.example` (sample)
+
 Planned auth errors:
 - `401`: missing/invalid/disabled token
 - `500`: auth config invalid/unreadable
+
+Health payload extension:
+- `auth_config_loaded`: boolean
+- `auth_mode`: `yaml-only` | `yaml-with-legacy-fallback`
 
 ## Error Handling
 
@@ -204,6 +216,8 @@ Status mapping:
 API_KEY=<random static key>
 PORT=3000
 YTDLP_PATH=yt-dlp   # or absolute path
+TOKEN_AUTH_MODE=yaml-only
+TOKEN_CONFIG_PATH=./config/tokens.yaml
 ```
 
 ## Dockerfile Requirements
