@@ -87,13 +87,10 @@ Native module exposes:
 
 Flashdrive is always source of truth. Internal copy is a working mirror.
 
-Current implementation status (Sprint 01):
+Current implementation status:
 - USB attach/detach lifecycle is implemented through `attachUsbDatabase`/`detachUsbDatabase`.
 - Write operations are synced back to USB immediately.
-- Local data mirror is currently persisted in `cache/flashtune.musicdb.json` while native `.musicdb` SQL execution integration is finalized.
-
-Data transition note:
-- Current service API is intentionally SQLite-shaped so implementation can be swapped from JSON mirror to actual SQLite with minimal screen/store changes.
+- Database service now uses `react-native-quick-sqlite` for songs/playlists/playlist_songs.
 
 ## Download Flow
 
@@ -125,6 +122,10 @@ User taps song
   → react-native-track-player plays from temp path
   → Modal closes → delete temp file
 ```
+
+Current implementation status:
+- Library song tap triggers USB read to temp preview path and playback through track-player.
+- Stop/unmount/error paths reset player and clean temp preview file.
 
 ## Database Schema (.musicdb)
 
@@ -203,6 +204,7 @@ Error handling contract in UI/service:
 - Connected: storage metrics + Music file list + delete action.
 - Delete: removes file and refreshes list from USB.
 - Disconnect: detaches DB and clears USB store state.
+- Disconnect also resets preview playback state and warns if final sync fails.
 
 ### Settings screen
 - Edits runtime backend URL and API key.
@@ -219,8 +221,10 @@ Implemented in Sprint 02:
 - app bootstrap hydrates persisted API config before normal runtime calls.
 
 ### Library screen
-- Currently skeleton sort/filter/action-sheet UI.
-- Full data binding to DB service remains planned follow-up.
+- Loads real songs from SQLite.
+- Supports sort chips over persisted song data.
+- Long press actions run real metadata update, playlist add/remove, and delete.
+- Song tap triggers preview playback flow from USB.
 
 ## Edge Cases
 

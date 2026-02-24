@@ -385,3 +385,4 @@ Persistent bar visible on all screens at all times:
 
 - Sprint 01 implementation contract and delivery notes: `docs/task/sprint01.md`
 - Sprint 02 planning contract (YAML multi-token auth): `docs/task/sprint02.md`
+- Sprint 03 core feature completion contract: `docs/task/sprint03.md`
