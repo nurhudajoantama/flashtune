@@ -12,6 +12,7 @@ import { LibraryScreen } from './src/screens/LibraryScreen'
 import { USBManagerScreen } from './src/screens/USBManagerScreen'
 import { SettingsScreen } from './src/screens/SettingsScreen'
 import { initDatabase } from './src/services/database.service'
+import { hydrateApiConfig } from './src/services/api.service'
 
 const Tab = createBottomTabNavigator()
 
@@ -25,7 +26,12 @@ const TabIcon = ({ label, focused }) => (
 
 export default function App() {
   useEffect(() => {
-    void initDatabase()
+    const bootstrap = async () => {
+      await hydrateApiConfig()
+      await initDatabase()
+    }
+
+    void bootstrap()
   }, [])
 
   return (

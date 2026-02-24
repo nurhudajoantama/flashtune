@@ -8,7 +8,7 @@ import {
   ScrollView,
   Alert,
 } from 'react-native'
-import { configureApi, getApiConfig } from '../services/api.service'
+import { getApiConfig, persistApiConfig } from '../services/api.service'
 
 const PLACEHOLDER_VERSION = '1.0.0 (build 1)'
 
@@ -17,9 +17,14 @@ export const SettingsScreen = () => {
   const [backendUrl, setBackendUrl] = useState(initialConfig.baseURL)
   const [apiKey, setApiKey] = useState(initialConfig.apiKey)
 
-  const handleSave = () => {
-    configureApi({ baseURL: backendUrl.trim(), apiKey: apiKey.trim() })
-    Alert.alert('Saved', 'Settings updated.')
+  const handleSave = async () => {
+    const result = await persistApiConfig({ baseURL: backendUrl.trim(), apiKey: apiKey.trim() })
+    if (result.ok) {
+      Alert.alert('Saved', 'Settings updated and persisted.')
+      return
+    }
+
+    Alert.alert('Save failed', 'Could not persist settings. Please try again.')
   }
 
   const handleClearTemp = () => {
