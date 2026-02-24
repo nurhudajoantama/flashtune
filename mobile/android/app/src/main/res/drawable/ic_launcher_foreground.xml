@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FlashTune icon — lightning bolt (Flash + Tune concept)
+  Canvas: 108×108dp, safe zone: 18–90dp on each axis
+  Bolt centered at (54,54), fills safe zone vertically
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+  <!-- Lightning bolt: top-right → mid-left → notch → bottom-left → mid-right → notch → close -->
+  <path
+      android:fillColor="#4CAF50"
+      android:pathData="M60,20 L36,56 L52,56 L46,88 L72,52 L56,52 Z"/>
+
+</vector>

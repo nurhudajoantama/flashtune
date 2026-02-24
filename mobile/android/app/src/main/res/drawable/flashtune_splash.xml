@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Splash screen window background.
+  Dark fill + centered FlashTune lightning bolt logo.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!-- Background -->
+  <item android:drawable="@color/splashscreen_background"/>
+
+  <!-- Centered logo -->
+  <item>
+    <bitmap
+        android:src="@drawable/ic_launcher_foreground"
+        android:gravity="center"
+        android:tileMode="disabled"/>
+  </item>
+
+</layer-list>

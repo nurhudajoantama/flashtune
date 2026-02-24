@@ -3,6 +3,7 @@
     "name": "FlashTune",
     "slug": "flashtune",
     "version": "1.0.0",
+    "description": "Download and manage your music library on a USB flashdrive.",
     "orientation": "portrait",
     "platforms": [
       "android"
