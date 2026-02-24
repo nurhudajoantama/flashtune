@@ -70,6 +70,27 @@ Rules:
   - Stage new files first with `git add <file>`
 - PRs are per sprint or per major feature (not per task)
 
+### Pull Request Workflow (GitHub CLI `gh`)
+
+Required rules:
+- Never merge sprint work directly into `dev` or `main`.
+- Always open PRs with `gh` from sprint/feature branch to `dev`.
+- If a direct merge happens by mistake, stop and ask user before any history rewrite.
+
+Standard PR flow:
+1. Confirm branch state:
+   - `git status`
+   - `git branch --show-current`
+2. Push branch:
+   - `git push -u origin <branch>`
+3. Create PR:
+   - `gh pr create --base dev --head <branch> --title "..." --body "..."`
+4. Return PR URL to user and wait for review/merge instruction.
+
+If `gh` context is unclear in-session:
+- Do not guess merge actions.
+- Document uncertainty in notes and ask one precise question before proceeding.
+
 ---
 
 ## Agents
@@ -91,11 +112,17 @@ Use this agent layout for sessions that span `mobile/`, `backend/`, and docs.
    - Must run before any implementation agent.
    - Responsibilities:
      - verify active sprint branch and Beads issue context
-     - claim issue (`bd update <id> --status in_progress`)
      - produce a detailed implementation plan (files, order, risks, validation, commit slicing)
      - wait for explicit user approval before implementation
      - coordinate parallel work between mobile/backend/docs agents
      - enforce completion gates before closeout
+   - Restrictions before user approval:
+     - do not create new Beads issues/epics/tasks
+     - do not update issue status to `in_progress`
+     - do not create git commits
+     - do not start implementation changes
+   - Ownership boundary:
+     - orchestrator does not create Beads tasks; task/issue creation is owned by implementation agents after user approval
 
 2. **Mobile Agent**
    - Scope: `mobile/` and Android native module integration points.
@@ -137,6 +164,7 @@ Use this agent layout for sessions that span `mobile/`, `backend/`, and docs.
 - **Issue gate (required):** implementation work must be linked to an active Beads issue before coding starts.
 - **Plan gate (required):** detailed orchestrator plan must be written and approved before coding starts.
 - **Documentation-first gate (required):** before implementation, write complete and detailed docs for the target change, then get user approval.
+- **Discussion gate (required):** before user approval, orchestrator may discuss and draft plans/docs only (no Beads creation/status mutation, no commits, no implementation).
 - **Docs gate (required):** any API/workflow/behavior change must update relevant docs in the same branch.
 - **Closeout gate (required):** issue status update + `bd sync` + successful push are required to finish.
 
@@ -187,28 +215,29 @@ Orchestrator must block completion if any handoff item is missing.
 1. Create or switch to sprint branch: `git checkout -b feature/sprint/<sprint-tag> dev`
 2. Create sprint epic (if missing): `bd create "Sprint <n>" -t epic -l sprint-<n>`
 3. Run `bd ready` — find available issues with your label and sprint tag
-4. Pick highest priority → `bd update <id> --status in_progress`
-5. Before coding, create a detailed implementation plan as the orchestrator agent:
+4. Before coding, create a detailed implementation plan as the orchestrator agent:
    - break work into concrete subtasks (mobile/backend/docs)
    - define file-level change plan and dependency order
    - identify risks, edge cases, and validation steps
    - define commit slicing strategy for parallel work
-6. Before implementation, write/update detailed docs as the contract for the change:
+5. Before implementation, write/update detailed docs as the contract for the change:
    - create or update `docs/task/<sprint-tag>.md` with the orchestrator plan and implementation contract
    - user story + acceptance criteria
    - page-level behavior for impacted screens
    - request/response contracts for each affected endpoint (with examples)
    - edge cases, storage/schema impact, and validation plan
-7. Share docs + plan with the user for review and wait for explicit implementation order.
-8. After approval, implement in scoped commits (mobile/backend split when running in parallel).
-9. Keep docs updated in the same change whenever behavior/contracts/workflow change (`docs/overview.md`, `docs/mobile.md`, `docs/backend.md`).
-10. `bd update <id> --status closed`
-11. `bd sync` → then follow **Landing the Plane** below
+6. Share docs + plan with the user for review and wait for explicit implementation order.
+7. After approval, create/claim Beads work (`bd create ...` or `bd update <id> --status in_progress`) and then implement in scoped commits (mobile/backend split when running in parallel).
+8. Keep docs updated in the same change whenever behavior/contracts/workflow change (`docs/overview.md`, `docs/mobile.md`, `docs/backend.md`).
+9. `bd update <id> --status closed`
+10. `bd sync` → then follow **Landing the Plane** below
 
 Implementation gate:
 - Do not start implementation until the detailed plan is written and aligned with the active Beads issue.
 - Do not start implementation until the documentation-first requirements are completed.
 - Do not start implementation until the user explicitly approves the plan and asks to proceed.
+- Do not create Beads tasks/epics/issues or git commits during orchestration discussion phase.
+- During orchestration and planning, Beads creation is forbidden; only implementation agents may create/update Beads work after approval.
 - If scope changes during implementation, update the plan first, then continue coding.
 
 If blocked: `bd update <id> --notes "[BLOCKED] Waiting for: <description>"` → pick next issue

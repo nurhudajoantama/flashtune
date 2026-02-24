@@ -15,6 +15,9 @@ Acceptance baseline:
 - `/download` streams bytes without temp files.
 - yt-dlp failures are mapped to deterministic status codes.
 
+Sprint 02 planned auth extension:
+- Support YAML-defined multi-token list with enabled/disabled entries.
+
 ## Tech Stack
 
 | | Choice |
@@ -156,6 +159,16 @@ Streaming lifecycle:
 ## Auth
 
 Single static key in `.env` as `API_KEY`. Client sends as `X-API-Key` header.
+
+Planned auth v2 contract (Sprint 02):
+
+- Config source: `backend/config/tokens.yaml` (override with `TOKEN_CONFIG_PATH`).
+- Header remains unchanged: `X-API-Key`.
+- Backend validates key against YAML `token_list` (enabled tokens only).
+
+Planned auth errors:
+- `401`: missing/invalid/disabled token
+- `500`: auth config invalid/unreadable
 
 ## Error Handling
 

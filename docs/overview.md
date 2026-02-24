@@ -132,6 +132,10 @@ As a user, I want clear errors and retry behavior when USB or network fails so I
   6. DB sync back to USB
 - Duplicate prevention is based on `source_url`.
 
+Planned for Sprint 02:
+- Authentication moves from single env key to YAML-configured `token_list`.
+- Request contract stays simple: clients continue sending `X-API-Key`.
+
 ---
 
 ## Backend API
@@ -164,6 +168,14 @@ Auth header requirement for all non-health endpoints:
 ```http
 X-API-Key: <API_KEY>
 ```
+
+Planned auth v2 (Sprint 02) keeps same header:
+
+```http
+X-API-Key: <token>
+```
+
+Backend source of truth changes to YAML token list.
 
 ### Response Shapes
 
@@ -372,3 +384,4 @@ Persistent bar visible on all screens at all times:
 ## Detailed Sprint Specs
 
 - Sprint 01 implementation contract and delivery notes: `docs/task/sprint01.md`
+- Sprint 02 planning contract (YAML multi-token auth): `docs/task/sprint02.md`

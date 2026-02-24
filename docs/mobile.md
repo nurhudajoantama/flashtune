@@ -16,6 +16,10 @@ Acceptance baseline:
 - Download writes song file to USB and metadata to local DB mirror.
 - Error states are surfaced without app crash.
 
+Sprint 02 planned auth extension:
+- Settings and API service will continue using `X-API-Key`, backed by backend YAML token list.
+- Backend URL and token credentials must be persisted so users do not reconfigure on every app launch.
+
 ## Tech Stack
 
 - **Framework:** React Native bare workflow (Expo bare template), Android only
@@ -165,6 +169,15 @@ GET  /playlist-info ?url=string       → PlaylistInfo
 GET  /health                          → { status, timestamp }
 ```
 
+Planned auth v2 request headers (Sprint 02):
+
+```http
+X-API-Key: <token>
+```
+
+Migration behavior:
+- mobile keeps same header contract; backend token source migrates from env single key to YAML token list.
+
 Mobile request expectations:
 - Every request except `/health` must include `X-API-Key`.
 - `/search` and `/playlist-info` expect JSON payload responses.
@@ -195,6 +208,11 @@ Error handling contract in UI/service:
 - Edits runtime backend URL and API key.
 - Save updates in-memory API config used by services.
 - Clear temp files remains confirmation-gated action.
+
+Planned Sprint 02 additions:
+- Keep single API Key input (token string)
+- Persist `backend_url` and `api_key` locally.
+- Hydrate settings from persisted storage at app startup.
 
 ### Library screen
 - Currently skeleton sort/filter/action-sheet UI.
