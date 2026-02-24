@@ -12,16 +12,17 @@ FlashTune is an Android music downloader & manager built around USB OTG flashdri
 flashtune/
 ├── mobile/           # React Native (Android)
 ├── backend/          # Node.js API
-├── overview.md       # This file — source of truth for architecture
-├── AGENTS.md         # Multi-agent workflow guide
-└── CLAUDE.md         # Orchestrator instructions
+├── docs/
+│   └── overview.md   # This file — architecture reference
+├── AGENTS.md         # Agent workflow guide
+└── CLAUDE.md         # Short pointer to AGENTS.md
 ```
 
 ---
 
 ## Tech Stack
 
-### Mobile (app/)
+### Mobile (mobile/)
 
 | Layer | Choice | Notes |
 |---|---|---|
@@ -45,7 +46,7 @@ flashtune/
 | TS execution | tsx | Run .ts directly, no build step |
 | Package manager | pnpm | |
 | Downloads | yt-dlp | CLI tool, spawned as subprocess |
-| Audio source | YouTube only | Spotify may be added later |
+| Audio source | YouTube only | |
 | API style | REST | |
 | Deployment | Dockerfile on Coolify | Needs Node + yt-dlp + ffmpeg + Python |
 
@@ -81,7 +82,7 @@ Flashdrive is always the source of truth. Internal copy is a working mirror only
 ```
 User triggers download
     → App POST /download to backend (with X-API-Key header)
-    → Backend downloads via yt-dlp or spotDL
+    → Backend downloads via yt-dlp
     → Streams MP3 bytes back to app
     → App writes to temp file (internal storage, RNFS)
     → SAF native module writes temp file to USB /Music/
@@ -253,12 +254,12 @@ backend/
 │   │   ├── download.ts
 │   │   └── playlist.ts
 │   ├── services/
-│   │   ├── ytdlp.service.ts   # Spawn yt-dlp subprocess
-│   │   └── spotdl.service.ts  # Spawn spotDL subprocess
+│   │   └── ytdlp.service.ts   # Spawn yt-dlp subprocess
 │   ├── middleware/
 │   │   └── auth.ts            # X-API-Key check
-│   └── index.ts               # Express app entry point
+│   └── index.ts               # Fastify app entry point
 ├── .env
+├── Dockerfile
 └── package.json
 ```
 
