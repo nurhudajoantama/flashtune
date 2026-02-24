@@ -1,4 +1,5 @@
-import { downloadSong } from './api.service'
+import RNFS from 'react-native-fs'
+import { buildDownloadUrl, getApiConfig } from './api.service'
 import { writeFile } from './usb.service'
 import type { SearchResult } from '../types'
 import { fs } from './file-system.service'
@@ -16,10 +17,23 @@ export const downloadAndSave = async (
 
   try {
     onProgress?.(0.05)
-    const buffer = await downloadSong(result.source_url)
 
-    onProgress?.(0.55)
-    await fs.writeFile(tempPath, arrayBufferToBase64(buffer), 'base64')
+    const { apiKey } = getApiConfig()
+    const { promise } = RNFS.downloadFile({
+      fromUrl: buildDownloadUrl(result.source_url),
+      toFile: tempPath,
+      headers: { 'X-API-Key': apiKey },
+      progress: (res) => {
+        if (res.contentLength > 0) {
+          onProgress?.(0.05 + 0.7 * (res.bytesWritten / res.contentLength))
+        }
+      },
+    })
+
+    const { statusCode } = await promise
+    if (statusCode !== 200) {
+      throw new Error(`Download failed (HTTP ${statusCode})`)
+    }
 
     onProgress?.(0.75)
     await writeFile(dirUri, filename, tempPath).catch((err: unknown) => {
@@ -61,25 +75,4 @@ const formatUsbWriteError = (err: unknown): string => {
   }
 
   return `USB write failed while saving the file: ${detail}`
-}
-
-const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-
-const arrayBufferToBase64 = (input: ArrayBuffer): string => {
-  const bytes = new Uint8Array(input)
-  let output = ''
-
-  for (let i = 0; i < bytes.length; i += 3) {
-    const a = bytes[i]
-    const b = i + 1 < bytes.length ? bytes[i + 1] : 0
-    const c = i + 2 < bytes.length ? bytes[i + 2] : 0
-    const chunk = (a << 16) | (b << 8) | c
-
-    output += BASE64_ALPHABET[(chunk >> 18) & 63]
-    output += BASE64_ALPHABET[(chunk >> 12) & 63]
-    output += i + 1 < bytes.length ? BASE64_ALPHABET[(chunk >> 6) & 63] : '='
-    output += i + 2 < bytes.length ? BASE64_ALPHABET[chunk & 63] : '='
-  }
-
-  return output
 }

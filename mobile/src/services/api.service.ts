@@ -80,10 +80,8 @@ export const searchSongs = async (query: string): Promise<SearchResult[]> => {
   return data
 }
 
-export const downloadSong = async (url: string): Promise<ArrayBuffer> => {
-  const { data } = await api.post('/download', { url }, { responseType: 'arraybuffer' })
-  return data
-}
+export const buildDownloadUrl = (url: string): string =>
+  `${runtimeConfig.baseURL}/download?url=${encodeURIComponent(url)}`
 
 export const getPlaylistInfo = async (url: string): Promise<PlaylistInfo> => {
   const { data } = await api.get('/playlist-info', { params: { url } })
