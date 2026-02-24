@@ -86,22 +86,22 @@ export const search = (query: string): Promise<YtSearchResult[]> => {
 
 export const streamDownload = (url: string) => {
   return spawn(YTDLP, [
-    url,
     '-x',
     '--audio-format', 'mp3',
     '--audio-quality', '0',
     '-o', '-',
     '--no-playlist',
+    url,
   ])
 }
 
 export const getPlaylistInfo = (url: string): Promise<{ title: string; entries: YtSearchResult[] }> => {
   return collectJsonLines(
     [
-      url,
       '--flat-playlist',
       '--dump-json',
       '--no-download',
+      url,
     ],
     'yt-dlp playlist failed',
   ).then((lines) => ({
