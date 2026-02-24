@@ -19,5 +19,9 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+# Build the TypeScript code
+RUN pnpm run build
+
 EXPOSE 3000
-CMD ["pnpm", "start"]
+
+CMD ["node", "dist/index.js"]
