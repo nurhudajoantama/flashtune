@@ -4,6 +4,7 @@ import { useUSBStore } from '../store/usb.store'
 import { usePlayerStore } from '../store/player.store'
 import { formatBytes } from '../utils/helpers'
 import {
+  clearUsbPermission,
   deleteFile,
   getStorageInfo,
   listDirectory,
@@ -64,19 +65,40 @@ export const USBManagerScreen = () => {
     )
   }, [setConnected])
 
+  const connectWithUri = useCallback(async () => {
+    const rootUri = await requestUsbPermission()
+    await attachUsbDatabase(rootUri)
+    await loadDriveState(rootUri)
+  }, [loadDriveState])
+
   const handleConnect = useCallback(async () => {
     setBusy(true)
     try {
-      const rootUri = await requestUsbPermission()
-      await attachUsbDatabase(rootUri)
-      await loadDriveState(rootUri)
+      await connectWithUri()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unable to connect USB drive'
-      Alert.alert('USB error', message)
+      Alert.alert('USB Error', message, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Re-authorize',
+          onPress: async () => {
+            setBusy(true)
+            try {
+              await clearUsbPermission()
+              await connectWithUri()
+            } catch (retryErr: unknown) {
+              const retryMsg = retryErr instanceof Error ? retryErr.message : 'Authorization failed'
+              Alert.alert('USB Error', retryMsg)
+            } finally {
+              setBusy(false)
+            }
+          },
+        },
+      ])
     } finally {
       setBusy(false)
     }
-  }, [loadDriveState])
+  }, [connectWithUri])
 
   const handleDisconnect = useCallback(async () => {
     setBusy(true)
@@ -138,9 +160,27 @@ export const USBManagerScreen = () => {
         )}
 
         <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.actionBtn} onPress={handleConnect} disabled={busy}>
-            <Text style={styles.actionBtnText}>{busy ? 'Working…' : 'Connect USB'}</Text>
-          </TouchableOpacity>
+          {!connected && (
+            <TouchableOpacity style={styles.actionBtn} onPress={handleConnect} disabled={busy}>
+              <Text style={styles.actionBtnText}>{busy ? 'Working…' : 'Connect USB'}</Text>
+            </TouchableOpacity>
+          )}
+          {!connected && !busy && (
+            <TouchableOpacity style={styles.reauthorizeBtn} onPress={async () => {
+              setBusy(true)
+              try {
+                await clearUsbPermission()
+                await connectWithUri()
+              } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : 'Authorization failed'
+                Alert.alert('USB Error', message)
+              } finally {
+                setBusy(false)
+              }
+            }}>
+              <Text style={styles.reauthorizeBtnText}>Re-authorize</Text>
+            </TouchableOpacity>
+          )}
           {connected && (
             <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnect} disabled={busy}>
               <Text style={styles.disconnectBtnText}>{busy ? 'Disconnecting…' : 'Disconnect'}</Text>
@@ -193,6 +233,8 @@ const styles = StyleSheet.create({
   actionBtnText: { color: '#fff', fontWeight: '600' },
   disconnectBtn: { backgroundColor: '#2b0d0d', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12 },
   disconnectBtnText: { color: '#f44336', fontWeight: '600' },
+  reauthorizeBtn: { backgroundColor: '#1a1a2e', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12, borderWidth: 1, borderColor: '#444' },
+  reauthorizeBtnText: { color: '#aaa', fontWeight: '600' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 6 },
   sectionTitle: { color: '#aaa', fontSize: 13, fontWeight: '600', fontFamily: 'monospace' },
   sectionCount: { color: '#555', fontSize: 12 },

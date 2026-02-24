@@ -4,6 +4,7 @@ const { UsbSafModule } = NativeModules
 
 type UsbModule = {
   requestPermission: () => Promise<string>
+  clearPermission: () => Promise<void>
   listDirectory: (uri: string) => Promise<FileEntry[]>
   writeFile: (destUri: string, sourcePath: string) => Promise<void>
   readFile: (sourceUri: string, destPath: string) => Promise<void>
@@ -57,6 +58,10 @@ export const requestUsbPermission = async (): Promise<string> => {
   const uri = await getUsbModule().requestPermission()
   assertSafUri(uri, 'USB root URI')
   return uri
+}
+
+export const clearUsbPermission = (): Promise<void> => {
+  return getUsbModule().clearPermission()
 }
 
 export const listDirectory = (uri: string): Promise<FileEntry[]> => {

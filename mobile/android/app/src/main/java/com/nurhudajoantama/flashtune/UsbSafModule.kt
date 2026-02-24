@@ -24,7 +24,7 @@ class UsbSafModule(private val reactContext: ReactApplicationContext) :
   private var pendingPermissionPromise: Promise? = null
 
   private val activityEventListener: ActivityEventListener = object : BaseActivityEventListener() {
-    override fun onActivityResult(activity: Activity?, requestCode: Int, resultCode: Int, data: Intent?) {
+    override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
       if (requestCode != REQUEST_OPEN_TREE) return
 
       val promise = pendingPermissionPromise
@@ -81,7 +81,7 @@ class UsbSafModule(private val reactContext: ReactApplicationContext) :
         return
       }
 
-      val activity = currentActivity
+      val activity = reactContext.currentActivity
       if (activity == null) {
         promise.reject("E_USB_PERMISSION", "No foreground activity available to request USB permission")
         return
@@ -100,6 +100,44 @@ class UsbSafModule(private val reactContext: ReactApplicationContext) :
     } catch (e: Exception) {
       pendingPermissionPromise = null
       rejectPromise(promise, "E_USB_PERMISSION", "Unable to read persisted USB permission.", e)
+    }
+  }
+
+  @ReactMethod
+  fun clearPermission(promise: Promise) {
+    try {
+      val stored = reactContext
+        .getSharedPreferences(PREFS_NAME, 0)
+        .getString(PREF_USB_ROOT_URI, null)
+
+      if (!stored.isNullOrBlank()) {
+        val uri = Uri.parse(stored)
+        try {
+          reactContext.contentResolver.releasePersistableUriPermission(
+            uri,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+          )
+        } catch (_: Exception) {}
+      }
+
+      for (perm in reactContext.contentResolver.persistedUriPermissions.toList()) {
+        try {
+          reactContext.contentResolver.releasePersistableUriPermission(
+            perm.uri,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+          )
+        } catch (_: Exception) {}
+      }
+
+      reactContext
+        .getSharedPreferences(PREFS_NAME, 0)
+        .edit()
+        .remove(PREF_USB_ROOT_URI)
+        .apply()
+
+      promise.resolve(null)
+    } catch (e: Exception) {
+      rejectPromise(promise, "E_USB_CLEAR", "Failed to clear USB permission.", e)
     }
   }
 

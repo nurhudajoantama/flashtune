@@ -28,7 +28,7 @@ Sprint 02 planned auth extension:
 - **Navigation:** React Navigation — bottom tabs + stack
 - **File I/O (internal only):** react-native-fs — temp files only, never USB
 - **USB File I/O:** Custom Kotlin native module (SAF) — all USB ops go here
-- **Database:** react-native-quick-sqlite — opens local copy of `.musicdb`
+- **Database:** expo-sqlite — opens local copy of `.musicdb`
 - **Preview player:** react-native-track-player
 - **HTTP:** axios
 

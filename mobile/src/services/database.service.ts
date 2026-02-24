@@ -1,82 +1,31 @@
+import * as SQLite from 'expo-sqlite'
 import type { Playlist, Song } from '../types'
 import { copyDatabase, syncDatabase } from './usb.service'
 import { fs } from './file-system.service'
 
-type SqliteConnection = {
-  execute: (sql: string, params?: unknown[]) => unknown
-  close?: () => void
-}
-
-type SqliteOpen = (options: { name: string }) => SqliteConnection
-
-const DB_LOCAL_PATH = `${fs.CachesDirectoryPath}/flashtune.musicdb`
+const DB_NAME = 'flashtune.musicdb'
+const DB_LOCAL_PATH = `${fs.CachesDirectoryPath}/${DB_NAME}`
 
 let currentUsbRootUri: string | null = null
-let db: SqliteConnection | null = null
+let db: SQLite.SQLiteDatabase | null = null
 let initPromise: Promise<void> | null = null
 let writeQueue: Promise<void> = Promise.resolve()
 
-const getSqliteOpen = (): SqliteOpen => {
-  const sqlite = require('react-native-quick-sqlite') as {
-    open?: SqliteOpen
-    default?: { open?: SqliteOpen }
-  }
-  const open = sqlite.open ?? sqlite.default?.open
+type BindParams = SQLite.SQLiteBindParams
 
-  if (!open) {
-    throw new Error('react-native-quick-sqlite open() is unavailable')
-  }
-
-  return open
+const run = (sql: string, params: BindParams = []): void => {
+  if (!db) throw new Error('Database is not initialized')
+  db.runSync(sql, params)
 }
 
-const normalizeRows = (result: unknown): Record<string, unknown>[] => {
-  if (!result || typeof result !== 'object') return []
-
-  const maybeRows = (result as { rows?: unknown }).rows
-  if (Array.isArray(maybeRows)) {
-    return maybeRows as Record<string, unknown>[]
-  }
-
-  if (!maybeRows || typeof maybeRows !== 'object') {
-    return []
-  }
-
-  const rowsObject = maybeRows as {
-    _array?: Record<string, unknown>[]
-    length?: number
-    item?: (index: number) => Record<string, unknown>
-  }
-
-  if (Array.isArray(rowsObject._array)) {
-    return rowsObject._array
-  }
-
-  if (typeof rowsObject.length === 'number' && typeof rowsObject.item === 'function') {
-    const rows: Record<string, unknown>[] = []
-    for (let i = 0; i < rowsObject.length; i += 1) {
-      rows.push(rowsObject.item(i))
-    }
-    return rows
-  }
-
-  return []
+const query = <T>(sql: string, params: BindParams = []): T[] => {
+  if (!db) throw new Error('Database is not initialized')
+  return db.getAllSync<T>(sql, params)
 }
 
-const execute = (sql: string, params: unknown[] = []): unknown => {
-  if (!db) {
-    throw new Error('Database is not initialized')
-  }
-  return db.execute(sql, params)
-}
-
-const query = <T>(sql: string, params: unknown[] = []): T[] => {
-  return normalizeRows(execute(sql, params)) as T[]
-}
-
-const closeDatabase = async (): Promise<void> => {
+const closeDatabase = (): void => {
   if (!db) return
-  db.close?.()
+  db.closeSync()
   db = null
 }
 
@@ -107,7 +56,7 @@ const syncIfAttached = async (): Promise<void> => {
 export const attachUsbDatabase = async (usbRootUri: string): Promise<void> => {
   await waitForWrites()
   currentUsbRootUri = usbRootUri
-  await closeDatabase()
+  closeDatabase()
   await copyDatabase(usbRootUri, DB_LOCAL_PATH).catch(() => null)
   await initDatabase()
 }
@@ -126,13 +75,12 @@ export const initDatabase = async (): Promise<void> => {
 
   initPromise = (async () => {
     await fs.mkdir(fs.CachesDirectoryPath)
-    await closeDatabase()
+    closeDatabase()
 
-    const open = getSqliteOpen()
-    db = open({ name: DB_LOCAL_PATH })
+    db = SQLite.openDatabaseSync(DB_NAME, {}, fs.CachesDirectoryPath)
 
-    execute('PRAGMA foreign_keys = ON')
-    execute(`
+    db.execSync('PRAGMA foreign_keys = ON')
+    db.execSync(`
       CREATE TABLE IF NOT EXISTS songs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
@@ -145,14 +93,14 @@ export const initDatabase = async (): Promise<void> => {
         duration_ms INTEGER NOT NULL DEFAULT 0
       )
     `)
-    execute(`
+    db.execSync(`
       CREATE TABLE IF NOT EXISTS playlists (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         created_at TEXT NOT NULL
       )
     `)
-    execute(`
+    db.execSync(`
       CREATE TABLE IF NOT EXISTS playlist_songs (
         playlist_id INTEGER NOT NULL,
         song_id INTEGER NOT NULL,
@@ -162,8 +110,8 @@ export const initDatabase = async (): Promise<void> => {
         FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE
       )
     `)
-    execute('CREATE INDEX IF NOT EXISTS idx_songs_source_url ON songs(source_url)')
-    execute('CREATE INDEX IF NOT EXISTS idx_playlist_songs_playlist_position ON playlist_songs(playlist_id, position)')
+    db.execSync('CREATE INDEX IF NOT EXISTS idx_songs_source_url ON songs(source_url)')
+    db.execSync('CREATE INDEX IF NOT EXISTS idx_playlist_songs_playlist_position ON playlist_songs(playlist_id, position)')
   })()
 
   try {
@@ -175,34 +123,21 @@ export const initDatabase = async (): Promise<void> => {
 
 export const getAllSongs = async (): Promise<Song[]> => {
   await initDatabase()
-  return query<Song>(
-    `
-      SELECT id, title, artist, album, cover_path, source_url, filename, download_date, duration_ms
-      FROM songs
-      ORDER BY download_date DESC
-    `,
-  )
+  return query<Song>(`
+    SELECT id, title, artist, album, cover_path, source_url, filename, download_date, duration_ms
+    FROM songs
+    ORDER BY download_date DESC
+  `)
 }
 
 export const insertSong = async (song: Omit<Song, 'id'>): Promise<void> => {
   await initDatabase()
   await runWrite(() => {
-    execute(
-      `
-        INSERT OR IGNORE INTO songs
-          (title, artist, album, cover_path, source_url, filename, download_date, duration_ms)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        song.title,
-        song.artist,
-        song.album,
-        song.cover_path,
-        song.source_url,
-        song.filename,
-        song.download_date,
-        song.duration_ms,
-      ],
+    run(
+      `INSERT OR IGNORE INTO songs
+        (title, artist, album, cover_path, source_url, filename, download_date, duration_ms)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [song.title, song.artist, song.album, song.cover_path, song.source_url, song.filename, song.download_date, song.duration_ms],
     )
   })
 }
@@ -216,14 +151,14 @@ export const updateSong = async (id: number, patch: Partial<Omit<Song, 'id'>>): 
   await runWrite(() => {
     const columns = entries.map(([key]) => `${key} = ?`).join(', ')
     const params = [...entries.map(([, value]) => value), id]
-    execute(`UPDATE songs SET ${columns} WHERE id = ?`, params)
+    run(`UPDATE songs SET ${columns} WHERE id = ?`, params as BindParams)
   })
 }
 
 export const deleteSong = async (id: number): Promise<void> => {
   await initDatabase()
   await runWrite(() => {
-    execute('DELETE FROM songs WHERE id = ?', [id])
+    run('DELETE FROM songs WHERE id = ?', [id])
   })
 }
 
@@ -241,14 +176,14 @@ export const getAllPlaylists = async (): Promise<Playlist[]> => {
 export const createPlaylist = async (name: string): Promise<void> => {
   await initDatabase()
   await runWrite(() => {
-    execute('INSERT INTO playlists (name, created_at) VALUES (?, ?)', [name, new Date().toISOString()])
+    run('INSERT INTO playlists (name, created_at) VALUES (?, ?)', [name, new Date().toISOString()])
   })
 }
 
 export const deletePlaylist = async (id: number): Promise<void> => {
   await initDatabase()
   await runWrite(() => {
-    execute('DELETE FROM playlists WHERE id = ?', [id])
+    run('DELETE FROM playlists WHERE id = ?', [id])
   })
 }
 
@@ -259,16 +194,14 @@ export const addSongToPlaylist = async (playlistId: number, songId: number): Pro
       'SELECT 1 as found FROM playlist_songs WHERE playlist_id = ? AND song_id = ? LIMIT 1',
       [playlistId, songId],
     )
-    if (exists.length > 0) {
-      return
-    }
+    if (exists.length > 0) return
 
     const positionRow = query<{ next_position: number }>(
       'SELECT COALESCE(MAX(position), 0) + 1 AS next_position FROM playlist_songs WHERE playlist_id = ?',
       [playlistId],
     )
 
-    execute('INSERT INTO playlist_songs (playlist_id, song_id, position) VALUES (?, ?, ?)', [
+    run('INSERT INTO playlist_songs (playlist_id, song_id, position) VALUES (?, ?, ?)', [
       playlistId,
       songId,
       Number(positionRow[0]?.next_position ?? 1),
@@ -279,7 +212,7 @@ export const addSongToPlaylist = async (playlistId: number, songId: number): Pro
 export const removeSongFromPlaylist = async (playlistId: number, songId: number): Promise<void> => {
   await initDatabase()
   await runWrite(() => {
-    execute('DELETE FROM playlist_songs WHERE playlist_id = ? AND song_id = ?', [playlistId, songId])
+    run('DELETE FROM playlist_songs WHERE playlist_id = ? AND song_id = ?', [playlistId, songId])
   })
 }
 

@@ -15,7 +15,7 @@ const toUri = (value: string): string =>
   value.startsWith('file://') ? value : `file://${value}`
 
 const createExpoFsFallback = (): FsLike => {
-  const expoFs = require('expo-file-system') as {
+  const expoFs = require('expo-file-system/legacy') as {
     cacheDirectory?: string
     makeDirectoryAsync: (path: string, options?: { intermediates?: boolean }) => Promise<void>
     getInfoAsync: (path: string) => Promise<{ exists: boolean }>
