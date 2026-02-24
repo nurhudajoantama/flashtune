@@ -13,16 +13,16 @@ export const downloadRoutes = async (app: FastifyInstance) => {
     let streamStarted = false
     let ytdlpStderr = ''
 
-    ffmpeg.stdout.once('data', () => {
+    ffmpeg.stdout!.once('data', () => {
       streamStarted = true
     })
 
-    ytdlp.stderr.on('data', (d) => {
+    ytdlp.stderr!.on('data', (d) => {
       ytdlpStderr += d.toString()
       app.log.warn(`yt-dlp: ${d}`)
     })
 
-    ffmpeg.stderr.on('data', (d) => {
+    ffmpeg.stderr!.on('data', (d) => {
       app.log.warn(`ffmpeg: ${d}`)
     })
 
@@ -62,6 +62,6 @@ export const downloadRoutes = async (app: FastifyInstance) => {
     })
 
     reply.header('Content-Type', 'audio/mpeg')
-    return reply.send(ffmpeg.stdout)
+    return reply.send(ffmpeg.stdout!)
   })
 }
