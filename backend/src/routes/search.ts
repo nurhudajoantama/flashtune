@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { verifyApiKey } from '../middleware/auth'
-import { search } from '../services/ytdlp.service'
+import { search, YtDlpError } from '../services/ytdlp.service'
 
 export const searchRoutes = async (app: FastifyInstance) => {
   app.get('/search', { preHandler: verifyApiKey }, async (request, reply) => {
@@ -9,8 +9,12 @@ export const searchRoutes = async (app: FastifyInstance) => {
     try {
       const results = await search(query)
       return results
-    } catch (err: any) {
-      return reply.status(422).send({ error: err.message })
+    } catch (err: unknown) {
+      if (err instanceof YtDlpError) {
+        return reply.status(err.statusCode).send({ error: err.message })
+      }
+
+      return reply.status(500).send({ error: 'Unexpected search failure' })
     }
   })
 }

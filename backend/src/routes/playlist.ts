@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { verifyApiKey } from '../middleware/auth'
-import { getPlaylistInfo } from '../services/ytdlp.service'
+import { getPlaylistInfo, YtDlpError } from '../services/ytdlp.service'
 
 export const playlistRoutes = async (app: FastifyInstance) => {
   app.get('/playlist-info', { preHandler: verifyApiKey }, async (request, reply) => {
@@ -9,8 +9,12 @@ export const playlistRoutes = async (app: FastifyInstance) => {
     try {
       const { title, entries } = await getPlaylistInfo(url)
       return { title, track_count: entries.length, tracks: entries }
-    } catch (err: any) {
-      return reply.status(422).send({ error: err.message })
+    } catch (err: unknown) {
+      if (err instanceof YtDlpError) {
+        return reply.status(err.statusCode).send({ error: err.message })
+      }
+
+      return reply.status(500).send({ error: 'Unexpected playlist failure' })
     }
   })
 }
