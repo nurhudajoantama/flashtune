@@ -4,6 +4,12 @@
 
 FlashTune is an Android music downloader & manager built around USB OTG flashdrives. The phone is a pure middleman — MP3 files and the tracking database live on the flashdrive, not internal storage. Plugging the flashdrive into any phone with FlashTune installed instantly loads all your music and history.
 
+## Active Sprint Note
+
+- This overview describes the current baseline architecture.
+- Sprint 04 simplification is implemented in `docs/task/sprint04.md`, including removal of preview player and local DB mirror from the mobile flow.
+- For Sprint 04 changed behavior and interfaces, use `docs/task/sprint04.md` as the detailed implementation record.
+
 ---
 
 ## Repository Structure

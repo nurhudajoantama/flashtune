@@ -2,6 +2,12 @@
 
 Implementation guide for the Android React Native app in `mobile/`.
 
+## Active Contract Note
+
+- This document reflects the current shipped baseline (through Sprint 03).
+- Sprint 04 simplification work has been implemented and tracked in `docs/task/sprint04.md`.
+- For Sprint 04 behavior and interface deltas (player removal, DB removal, direct folder writes, download modal flow), use `docs/task/sprint04.md` as the implementation record.
+
 ## Scope and User Story
 
 Problem:
