@@ -81,7 +81,7 @@ const collectJsonLines = async (args: string[], fallbackMessage: string): Promis
 export const search = (query: string): Promise<YtSearchResult[]> => {
   return collectJsonLines(
     [
-      `ytsearch5:${query}`,
+      `ytsearch100:${query}`,
       '--dump-json',
       '--flat-playlist',
       '--no-download',
