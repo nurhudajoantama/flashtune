@@ -11,8 +11,8 @@ export const USBStatusBar = () => {
       <View style={[styles.dot, connected ? styles.dotOn : styles.dotOff]} />
       <Text style={styles.text}>
         {connected
-          ? `${name ?? 'USB'} · ${formatBytes(freeBytes)} free`
-          : 'USB Disconnected — plug in your drive'}
+          ? `Music Folder · ${formatBytes(freeBytes)} free`
+          : 'No folder selected — go to USB tab'}
       </Text>
     </View>
   )

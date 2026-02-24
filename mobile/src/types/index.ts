@@ -1,19 +1,9 @@
 export interface Song {
-  id: number
+  filename: string
   title: string
   artist: string
-  album: string
-  cover_path: string
-  source_url: string
-  filename: string
-  download_date: string
-  duration_ms: number
-}
-
-export interface Playlist {
-  id: number
-  name: string
-  created_at: string
+  size: number
+  uri: string
 }
 
 export interface SearchResult {
@@ -37,6 +27,7 @@ export interface USBState {
   freeBytes: number
   usedBytes: number
   totalBytes: number
+  cachedFilenames: Set<string>
 }
 
 export type DownloadStatus = 'queued' | 'downloading' | 'writing' | 'done' | 'error'

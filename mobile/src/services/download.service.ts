@@ -1,6 +1,5 @@
 import { downloadSong } from './api.service'
 import { writeFile } from './usb.service'
-import { getLocalDatabasePath, insertSong, songExistsByUrl } from './database.service'
 import type { SearchResult } from '../types'
 import { fs } from './file-system.service'
 
@@ -8,16 +7,12 @@ const TEMP_DIR = fs.CachesDirectoryPath + '/flashtune'
 
 export const downloadAndSave = async (
   result: SearchResult,
-  usbRootUri: string,
+  dirUri: string,
   onProgress?: (progress: number) => void,
 ): Promise<void> => {
-  const exists = await songExistsByUrl(result.source_url)
-  if (exists) throw new Error('Song already exists on drive')
-
   await fs.mkdir(TEMP_DIR)
   const filename = sanitizeFilename(`${result.artist} - ${result.title}.mp3`)
   const tempPath = `${TEMP_DIR}/${filename}`
-  const dbPath = getLocalDatabasePath()
 
   try {
     onProgress?.(0.05)
@@ -27,27 +22,9 @@ export const downloadAndSave = async (
     await fs.writeFile(tempPath, arrayBufferToBase64(buffer), 'base64')
 
     onProgress?.(0.75)
-    await writeFile(`${usbRootUri}/Music/${filename}`, tempPath).catch((err: unknown) => {
+    await writeFile(dirUri, filename, tempPath).catch((err: unknown) => {
       throw new Error(formatUsbWriteError(err))
     })
-
-    onProgress?.(0.9)
-    await insertSong({
-      title: result.title,
-      artist: result.artist,
-      album: '',
-      cover_path: '',
-      source_url: result.source_url,
-      filename,
-      download_date: new Date().toISOString(),
-      duration_ms: result.duration_ms,
-    }).catch((err: unknown) => {
-      throw new Error(formatDatabaseSyncError(err))
-    })
-
-    if (!(await fs.exists(dbPath))) {
-      await fs.writeFile(dbPath, '', 'utf8')
-    }
 
     onProgress?.(1)
   } finally {
@@ -84,21 +61,6 @@ const formatUsbWriteError = (err: unknown): string => {
   }
 
   return `USB write failed while saving the file: ${detail}`
-}
-
-const formatDatabaseSyncError = (err: unknown): string => {
-  const detail = toMessage(err)
-  const normalized = detail.toLowerCase()
-  const looksSyncFailure = normalized.includes('sync')
-    || normalized.includes('permission')
-    || normalized.includes('saf')
-    || normalized.includes('disconnected')
-
-  if (looksSyncFailure) {
-    return 'Track file was copied, but database sync to USB failed. Keep USB connected and reconnect it in USB Manager to resync before next download.'
-  }
-
-  return `Database update failed after file copy: ${detail}`
 }
 
 const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'

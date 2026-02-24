@@ -15,5 +15,5 @@ export const useDownloadStore = create<DownloadStore>((set) => ({
   updateItem: (id, patch) =>
     set((s) => ({ queue: s.queue.map((i) => (i.id === id ? { ...i, ...patch } : i)) })),
   removeItem: (id) => set((s) => ({ queue: s.queue.filter((i) => i.id !== id) })),
-  clearCompleted: () => set((s) => ({ queue: s.queue.filter((i) => i.status !== 'done') })),
+  clearCompleted: () => set((s) => ({ queue: s.queue.filter((i) => i.status !== 'done' && i.status !== 'error') })),
 }))
