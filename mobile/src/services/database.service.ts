@@ -1,6 +1,6 @@
-import RNFS from 'react-native-fs'
 import type { Playlist, Song } from '../types'
 import { copyDatabase, syncDatabase } from './usb.service'
+import { fs } from './file-system.service'
 
 type SqliteConnection = {
   execute: (sql: string, params?: unknown[]) => unknown
@@ -9,7 +9,7 @@ type SqliteConnection = {
 
 type SqliteOpen = (options: { name: string }) => SqliteConnection
 
-const DB_LOCAL_PATH = `${RNFS.CachesDirectoryPath}/flashtune.musicdb`
+const DB_LOCAL_PATH = `${fs.CachesDirectoryPath}/flashtune.musicdb`
 
 let currentUsbRootUri: string | null = null
 let db: SqliteConnection | null = null
@@ -125,7 +125,7 @@ export const initDatabase = async (): Promise<void> => {
   }
 
   initPromise = (async () => {
-    await RNFS.mkdir(RNFS.CachesDirectoryPath)
+    await fs.mkdir(fs.CachesDirectoryPath)
     await closeDatabase()
 
     const open = getSqliteOpen()

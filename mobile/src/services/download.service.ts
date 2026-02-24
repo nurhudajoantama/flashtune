@@ -1,10 +1,10 @@
-import RNFS from 'react-native-fs'
 import { downloadSong } from './api.service'
 import { writeFile } from './usb.service'
 import { getLocalDatabasePath, insertSong, songExistsByUrl } from './database.service'
 import type { SearchResult } from '../types'
+import { fs } from './file-system.service'
 
-const TEMP_DIR = RNFS.CachesDirectoryPath + '/flashtune'
+const TEMP_DIR = fs.CachesDirectoryPath + '/flashtune'
 
 export const downloadAndSave = async (
   result: SearchResult,
@@ -14,7 +14,7 @@ export const downloadAndSave = async (
   const exists = await songExistsByUrl(result.source_url)
   if (exists) throw new Error('Song already exists on drive')
 
-  await RNFS.mkdir(TEMP_DIR)
+  await fs.mkdir(TEMP_DIR)
   const filename = sanitizeFilename(`${result.artist} - ${result.title}.mp3`)
   const tempPath = `${TEMP_DIR}/${filename}`
   const dbPath = getLocalDatabasePath()
@@ -24,7 +24,7 @@ export const downloadAndSave = async (
     const buffer = await downloadSong(result.source_url)
 
     onProgress?.(0.55)
-    await RNFS.writeFile(tempPath, arrayBufferToBase64(buffer), 'base64')
+    await fs.writeFile(tempPath, arrayBufferToBase64(buffer), 'base64')
 
     onProgress?.(0.75)
     await writeFile(`${usbRootUri}/Music/${filename}`, tempPath).catch((err: unknown) => {
@@ -45,13 +45,13 @@ export const downloadAndSave = async (
       throw new Error(formatDatabaseSyncError(err))
     })
 
-    if (!(await RNFS.exists(dbPath))) {
-      await RNFS.writeFile(dbPath, '', 'utf8')
+    if (!(await fs.exists(dbPath))) {
+      await fs.writeFile(dbPath, '', 'utf8')
     }
 
     onProgress?.(1)
   } finally {
-    await RNFS.unlink(tempPath).catch(() => null)
+    await fs.unlink(tempPath).catch(() => null)
   }
 }
 

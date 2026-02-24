@@ -11,8 +11,6 @@ import {
   Modal,
   TextInput,
 } from 'react-native'
-import RNFS from 'react-native-fs'
-import TrackPlayer from 'react-native-track-player'
 import type { Playlist, Song } from '../types'
 import {
   addSongToPlaylist,
@@ -28,10 +26,19 @@ import { deleteFile, readFile } from '../services/usb.service'
 import { usePlayerStore } from '../store/player.store'
 import { useUSBStore } from '../store/usb.store'
 import { formatDuration } from '../utils/helpers'
+import { fs } from '../services/file-system.service'
+import {
+  addTrack,
+  isTrackPlayerAvailable,
+  playTrack,
+  resetTrackPlayer,
+  setupTrackPlayer,
+  stopTrackPlayer,
+} from '../services/track-player.service'
 
 type SortKey = 'title' | 'artist' | 'album' | 'date'
 
-const PREVIEW_TEMP_DIR = `${RNFS.CachesDirectoryPath}/flashtune-previews`
+const PREVIEW_TEMP_DIR = `${fs.CachesDirectoryPath}/flashtune-previews`
 
 let trackPlayerSetupPromise: Promise<void> | null = null
 
@@ -40,7 +47,7 @@ const ensureTrackPlayerSetup = async (): Promise<void> => {
     return trackPlayerSetupPromise
   }
 
-  trackPlayerSetupPromise = TrackPlayer.setupPlayer().catch((err) => {
+  trackPlayerSetupPromise = setupTrackPlayer().catch((err) => {
     trackPlayerSetupPromise = null
     throw err
   })
@@ -106,14 +113,14 @@ export const LibraryScreen = () => {
     if (!target) {
       return
     }
-    await RNFS.unlink(target).catch(() => null)
+    await fs.unlink(target).catch(() => null)
   }, [])
 
   const stopPreview = useCallback(async () => {
     previewRequestRef.current += 1
     const tempPath = usePlayerStore.getState().previewTempPath
-    await TrackPlayer.stop().catch(() => null)
-    await TrackPlayer.reset().catch(() => null)
+    await stopTrackPlayer().catch(() => null)
+    await resetTrackPlayer().catch(() => null)
     await cleanupPreviewTempFile(tempPath)
     hidePreview()
   }, [cleanupPreviewTempFile, hidePreview])
@@ -121,6 +128,11 @@ export const LibraryScreen = () => {
   const startPreview = useCallback(async (song: Song) => {
     if (!usbConnected || !usbUri) {
       Alert.alert('Preview unavailable', 'Connect your USB drive to preview songs.')
+      return
+    }
+
+    if (!isTrackPlayerAvailable()) {
+      Alert.alert('Preview unavailable', 'Track player native module is not available in this build.')
       return
     }
 
@@ -134,7 +146,7 @@ export const LibraryScreen = () => {
 
     try {
       await ensureTrackPlayerSetup()
-      await RNFS.mkdir(PREVIEW_TEMP_DIR)
+      await fs.mkdir(PREVIEW_TEMP_DIR)
       showPreview(song)
       setPreviewTempPath(tempPath)
 
@@ -144,8 +156,8 @@ export const LibraryScreen = () => {
         return
       }
 
-      await TrackPlayer.reset()
-      await TrackPlayer.add({
+      await resetTrackPlayer()
+      await addTrack({
         url: `file://${tempPath}`,
         title: song.title,
         artist: song.artist,
@@ -153,11 +165,11 @@ export const LibraryScreen = () => {
 
       if (previewRequestRef.current !== requestId) {
         await cleanupPreviewTempFile(tempPath)
-        await TrackPlayer.reset().catch(() => null)
+        await resetTrackPlayer().catch(() => null)
         return
       }
 
-      await TrackPlayer.play()
+      await playTrack()
     } catch (err: unknown) {
       await cleanupPreviewTempFile(tempPath)
       hidePreview()

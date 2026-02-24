@@ -1,6 +1,5 @@
 import React, { useCallback, useState } from 'react'
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native'
-import TrackPlayer from 'react-native-track-player'
 import { useUSBStore } from '../store/usb.store'
 import { usePlayerStore } from '../store/player.store'
 import { formatBytes } from '../utils/helpers'
@@ -12,6 +11,7 @@ import {
   type FileEntry,
 } from '../services/usb.service'
 import { attachUsbDatabase, detachUsbDatabase } from '../services/database.service'
+import { resetTrackPlayer, stopTrackPlayer } from '../services/track-player.service'
 
 type UsbFile = FileEntry & { id: string; uri: string }
 
@@ -88,8 +88,8 @@ export const USBManagerScreen = () => {
       const detail = err instanceof Error ? err.message : 'Unknown sync error'
       disconnectError = `USB disconnected, but database sync before detach failed: ${detail}`
     } finally {
-      await TrackPlayer.stop().catch(() => null)
-      await TrackPlayer.reset().catch(() => null)
+      await stopTrackPlayer().catch(() => null)
+      await resetTrackPlayer().catch(() => null)
       usePlayerStore.getState().hide()
       setFiles([])
       setDisconnected()
