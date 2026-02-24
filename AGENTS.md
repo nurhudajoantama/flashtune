@@ -20,7 +20,8 @@ flashtune/                  ← single repo, pnpm workspace
 ├── docs/
 │   ├── overview.md         ← architecture reference
 │   ├── mobile.md           ← mobile implementation guide
-│   └── backend.md          ← backend implementation guide
+│   ├── backend.md          ← backend implementation guide
+│   └── task/               ← sprint/task implementation contracts
 ├── AGENTS.md               ← this file
 └── pnpm-workspace.yaml
 ```
@@ -135,8 +136,29 @@ Use this agent layout for sessions that span `mobile/`, `backend/`, and docs.
 
 - **Issue gate (required):** implementation work must be linked to an active Beads issue before coding starts.
 - **Plan gate (required):** detailed orchestrator plan must be written and approved before coding starts.
+- **Documentation-first gate (required):** before implementation, write complete and detailed docs for the target change, then get user approval.
 - **Docs gate (required):** any API/workflow/behavior change must update relevant docs in the same branch.
 - **Closeout gate (required):** issue status update + `bd sync` + successful push are required to finish.
+
+#### Documentation-first requirements (must exist before coding)
+
+For every issue, create/update documentation first and treat it as an implementation contract.
+
+Storage location requirement:
+- The active implementation plan and delivery contract must live in `docs/task/<sprint-tag>.md`.
+
+Minimum required detail:
+- problem statement and scope boundaries
+- user story (`As a ... I want ... so that ...`) and acceptance criteria
+- page-by-page behavior for impacted screens (states, actions, errors, empty/loading/offline)
+- API contract changes: endpoints, auth requirements, request schema, response schema, status codes, error payloads, examples
+- data model/storage changes (`.musicdb`, payload fields, migration notes if needed)
+- edge cases, failure handling, and recovery behavior
+- validation plan (manual and/or automated checks)
+
+Documentation approval rule:
+- Do not start implementation until this detailed documentation is reviewed and explicitly approved by the user.
+- If scope changes, update docs first, re-align plan, then continue implementation.
 
 #### Single-source reference policy
 
@@ -171,14 +193,21 @@ Orchestrator must block completion if any handoff item is missing.
    - define file-level change plan and dependency order
    - identify risks, edge cases, and validation steps
    - define commit slicing strategy for parallel work
-6. Share the plan with the user for review and wait for explicit implementation order.
-7. After approval, implement in scoped commits (mobile/backend split when running in parallel).
-8. Keep docs updated in the same change whenever behavior/contracts/workflow change (`docs/overview.md`, `docs/mobile.md`, `docs/backend.md`).
-9. `bd update <id> --status closed`
-10. `bd sync` → then follow **Landing the Plane** below
+6. Before implementation, write/update detailed docs as the contract for the change:
+   - create or update `docs/task/<sprint-tag>.md` with the orchestrator plan and implementation contract
+   - user story + acceptance criteria
+   - page-level behavior for impacted screens
+   - request/response contracts for each affected endpoint (with examples)
+   - edge cases, storage/schema impact, and validation plan
+7. Share docs + plan with the user for review and wait for explicit implementation order.
+8. After approval, implement in scoped commits (mobile/backend split when running in parallel).
+9. Keep docs updated in the same change whenever behavior/contracts/workflow change (`docs/overview.md`, `docs/mobile.md`, `docs/backend.md`).
+10. `bd update <id> --status closed`
+11. `bd sync` → then follow **Landing the Plane** below
 
 Implementation gate:
 - Do not start implementation until the detailed plan is written and aligned with the active Beads issue.
+- Do not start implementation until the documentation-first requirements are completed.
 - Do not start implementation until the user explicitly approves the plan and asks to proceed.
 - If scope changes during implementation, update the plan first, then continue coding.
 
@@ -199,3 +228,66 @@ git status   # must show "up to date with origin"
 
 - File beads issues for any remaining / follow-up work
 - Never leave uncommitted or unpushed changes
+
+<!-- bv-agent-instructions-v1 -->
+
+---
+
+## Beads Workflow Integration
+
+This project uses [beads_viewer](https://github.com/Dicklesworthstone/beads_viewer) for issue tracking. Issues are stored in `.beads/` and tracked in git.
+
+### Essential Commands
+
+```bash
+# View issues (launches TUI - avoid in automated sessions)
+bv
+
+# CLI commands for agents (use these instead)
+bd ready              # Show issues ready to work (no blockers)
+bd list --status=open # All open issues
+bd show <id>          # Full issue details with dependencies
+bd create --title="..." --type=task --priority=2
+bd update <id> --status=in_progress
+bd close <id> --reason="Completed"
+bd close <id1> <id2>  # Close multiple issues at once
+bd sync               # Commit and push changes
+```
+
+### Workflow Pattern
+
+1. **Start**: Run `bd ready` to find actionable work
+2. **Claim**: Use `bd update <id> --status=in_progress`
+3. **Work**: Implement the task
+4. **Complete**: Use `bd close <id>`
+5. **Sync**: Always run `bd sync` at session end
+
+### Key Concepts
+
+- **Dependencies**: Issues can block other issues. `bd ready` shows only unblocked work.
+- **Priority**: P0=critical, P1=high, P2=medium, P3=low, P4=backlog (use numbers, not words)
+- **Types**: task, bug, feature, epic, question, docs
+- **Blocking**: `bd dep add <issue> <depends-on>` to add dependencies
+
+### Session Protocol
+
+**Before ending any session, run this checklist:**
+
+```bash
+git status              # Check what changed
+git add <files>         # Stage code changes
+bd sync                 # Commit beads changes
+git commit -m "..."     # Commit code
+bd sync                 # Commit any new beads changes
+git push                # Push to remote
+```
+
+### Best Practices
+
+- Check `bd ready` at session start to find available work
+- Update status as you work (in_progress → closed)
+- Create new issues with `bd create` when you discover tasks
+- Use descriptive titles and set appropriate priority/type
+- Always `bd sync` before ending session
+
+<!-- end-bv-agent-instructions -->

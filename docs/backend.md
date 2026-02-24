@@ -2,6 +2,19 @@
 
 Implementation guide for the Fastify API in `backend/`.
 
+## Scope and User Story
+
+Problem:
+- Mobile app requires stable, stream-capable YouTube adapter endpoints with explicit error contracts.
+
+Primary story:
+- As a mobile client, I want a reliable backend search/download API so I can stream and persist songs to USB without backend state.
+
+Acceptance baseline:
+- All protected routes validate `X-API-Key`.
+- `/download` streams bytes without temp files.
+- yt-dlp failures are mapped to deterministic status codes.
+
 ## Tech Stack
 
 | | Choice |
@@ -47,6 +60,51 @@ GET  /playlist-info ?url=string       → PlaylistInfo
 GET  /health                          → { status: 'ok', timestamp: string }
 ```
 
+### Request and Response Examples
+
+`GET /search?query=bohemian+rhapsody`
+
+```json
+[
+  {
+    "title": "Bohemian Rhapsody",
+    "artist": "Queen",
+    "duration_ms": 354000,
+    "thumbnail_url": "https://i.ytimg.com/...",
+    "source_url": "https://www.youtube.com/watch?v=fJ9rUzIMcZQ"
+  }
+]
+```
+
+`POST /download`
+
+```json
+{ "url": "https://www.youtube.com/watch?v=fJ9rUzIMcZQ" }
+```
+
+Response:
+- status `200`
+- header `Content-Type: audio/mpeg`
+- body: binary stream
+
+`GET /playlist-info?url=https://www.youtube.com/playlist?list=...`
+
+```json
+{
+  "title": "My Playlist",
+  "track_count": 12,
+  "tracks": [
+    {
+      "title": "Track 1",
+      "artist": "Artist",
+      "duration_ms": 201000,
+      "thumbnail_url": "https://i.ytimg.com/...",
+      "source_url": "https://www.youtube.com/watch?v=..."
+    }
+  ]
+}
+```
+
 ### Response Shapes
 
 ```typescript
@@ -75,12 +133,25 @@ Spawn via `child_process.spawn`:
 
 Always handle: stderr logging, non-zero exit codes, process kill on client disconnect.
 
+Current implementation behavior:
+- shared JSON-lines collector for search/playlist endpoints
+- typed `YtDlpError` with status codes for route-level mapping
+- `ENOENT` (binary missing) handled as 500
+- non-zero exit with stderr mapped to 422 for domain/content errors
+
 ## Streaming (Critical)
 
 `POST /download` pipes yt-dlp stdout directly to Fastify's reply stream.
 No temp files. No buffering. Stateless per request.
 
 Kill yt-dlp process immediately when client disconnects.
+
+Streaming lifecycle:
+- spawn process with mp3 extraction flags
+- begin reply with `audio/mpeg`
+- detect first stdout chunk as stream start marker
+- if process fails before first chunk, return JSON error (422/500)
+- if process fails after stream starts, log warning and terminate process
 
 ## Auth
 
@@ -94,6 +165,25 @@ Single static key in `.env` as `API_KEY`. Client sends as `X-API-Key` header.
 | Invalid / unavailable URL | 422 with yt-dlp stderr reason |
 | API key missing/wrong | 401 |
 | Client disconnects mid-stream | Kill yt-dlp process immediately |
+
+Canonical error payload:
+
+```json
+{ "error": "human readable message" }
+```
+
+Status mapping:
+- `400`: validation (missing `query` or `url`)
+- `401`: auth failure
+- `422`: yt-dlp content/domain failure
+- `500`: runtime failure (binary missing or unexpected error)
+
+## Business Logic Notes
+
+- Backend remains stateless per request.
+- No durable task queue in backend; mobile owns queue orchestration.
+- No server-side deduplication; dedup belongs to mobile `.musicdb` layer.
+- Search and playlist adapters normalize upstream yt-dlp fields into stable app contracts.
 
 ## Environment Variables
 

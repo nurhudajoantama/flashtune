@@ -13,7 +13,10 @@ flashtune/
 ├── mobile/           # React Native (Android)
 ├── backend/          # Node.js API
 ├── docs/
-│   └── overview.md   # This file — architecture reference
+│   ├── overview.md   # This file — architecture reference
+│   ├── mobile.md     # Mobile implementation rules and behavior
+│   ├── backend.md    # Backend implementation rules and API behavior
+│   └── task/         # Sprint/task implementation contracts
 ├── AGENTS.md         # Agent workflow guide
 └── CLAUDE.md         # Short pointer to AGENTS.md
 ```
@@ -102,6 +105,35 @@ User taps preview on a song
 
 ---
 
+## Product Stories (Current Baseline)
+
+### Story A: Portable USB library
+As a user, I want my songs and metadata to live on USB so I can move my library between devices.
+
+### Story B: Search and save
+As a user, I want to search YouTube tracks and download selected songs to USB so I can build my offline collection.
+
+### Story C: Safe recoverable operations
+As a user, I want clear errors and retry behavior when USB or network fails so I do not lose trust in the app.
+
+---
+
+## Business Logic Overview
+
+- USB storage is source of truth for MP3 and `.musicdb`.
+- Mobile keeps a local working mirror for runtime operations.
+- Backend is stateless and request-scoped; no temp file persistence for downloads.
+- Download transaction (logical):
+  1. search result selected
+  2. backend stream requested
+  3. temp file write in app sandbox
+  4. native SAF write to USB `Music/`
+  5. song metadata write
+  6. DB sync back to USB
+- Duplicate prevention is based on `source_url`.
+
+---
+
 ## Backend API
 
 **Base URL:** `BACKEND_URL` in `.env`
@@ -112,6 +144,26 @@ User taps preview on a song
 | GET | /search | `?query=string` | `SearchResult[]` |
 | POST | /download | `{ url: string }` | MP3 stream |
 | GET | /playlist-info | `?url=string` | `PlaylistInfo` |
+
+### Status and Error Contract
+
+| Endpoint | 200 | 400 | 401 | 422 | 500 |
+|---|---|---|---|---|---|
+| GET /search | list results | missing query | missing/wrong key | yt-dlp domain failure | server/runtime failure |
+| POST /download | audio stream | missing url | missing/wrong key | yt-dlp pre-stream failure | yt-dlp binary/runtime failure |
+| GET /playlist-info | playlist payload | missing url | missing/wrong key | yt-dlp domain failure | server/runtime failure |
+
+Error payload shape:
+
+```json
+{ "error": "human readable message" }
+```
+
+Auth header requirement for all non-health endpoints:
+
+```http
+X-API-Key: <API_KEY>
+```
 
 ### Response Shapes
 
@@ -314,3 +366,9 @@ Persistent bar visible on all screens at all times:
 | Backend unreachable | Show error state on Search screen, Library still usable |
 | Temp files from crashed session | Clean up on app startup |
 | Playlist URL with 100+ tracks | Queue all, show progress, allow cancel per-song |
+
+---
+
+## Detailed Sprint Specs
+
+- Sprint 01 implementation contract and delivery notes: `docs/task/sprint01.md`

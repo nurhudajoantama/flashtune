@@ -2,6 +2,20 @@
 
 Implementation guide for the Android React Native app in `mobile/`.
 
+## Scope and User Story
+
+Problem:
+- Mobile app must orchestrate USB lifecycle, backend integration, and local state while respecting Android SAF constraints.
+
+Primary story:
+- As a user, I want to search and download songs to USB and see library/USB status inside one app so I can manage a portable music collection.
+
+Acceptance baseline:
+- USB connect/disconnect works through SAF permission and store state.
+- Search executes against backend and can trigger download.
+- Download writes song file to USB and metadata to local DB mirror.
+- Error states are surfaced without app crash.
+
 ## Tech Stack
 
 - **Framework:** React Native bare workflow (Expo bare template), Android only
@@ -69,6 +83,14 @@ Native module exposes:
 
 Flashdrive is always source of truth. Internal copy is a working mirror.
 
+Current implementation status (Sprint 01):
+- USB attach/detach lifecycle is implemented through `attachUsbDatabase`/`detachUsbDatabase`.
+- Write operations are synced back to USB immediately.
+- Local data mirror is currently persisted in `cache/flashtune.musicdb.json` while native `.musicdb` SQL execution integration is finalized.
+
+Data transition note:
+- Current service API is intentionally SQLite-shaped so implementation can be swapped from JSON mirror to actual SQLite with minimal screen/store changes.
+
 ## Download Flow
 
 ```
@@ -81,6 +103,15 @@ User triggers download
   → Insert song into .musicdb
   → Sync .musicdb to USB
 ```
+
+Current implementation status (Sprint 01):
+- Search screen now calls backend `/search` and triggers download flow from result rows.
+- Download queue statuses update through Zustand (`queued` → `downloading` → `writing` → `done/error`).
+
+Business logic details:
+- Dedup check runs before download using `source_url`.
+- Temp file is always cleaned up in `finally` block.
+- Queue item updates are progressive and reversible on failures.
 
 ## Preview Player Flow
 
@@ -134,6 +165,41 @@ GET  /playlist-info ?url=string       → PlaylistInfo
 GET  /health                          → { status, timestamp }
 ```
 
+Mobile request expectations:
+- Every request except `/health` must include `X-API-Key`.
+- `/search` and `/playlist-info` expect JSON payload responses.
+- `/download` expects raw binary body and is converted to base64 for RNFS temp write.
+
+Error handling contract in UI/service:
+- 400/401/422/500 all map to actionable user message.
+- Backend `error` field is propagated to alert/toast where available.
+
+## Page-by-Page Behavior Contract
+
+### Search screen
+- Loading: shows activity indicator with `Searching YouTube...`.
+- Empty before search: hint message.
+- Empty after search: `No results found`.
+- Result row:
+  - if already in DB: badge `On drive`
+  - else: download button creates queue item and starts workflow
+- Error: alert with backend or service error message.
+
+### USB Manager screen
+- Disconnected: status card + connect button.
+- Connected: storage metrics + Music file list + delete action.
+- Delete: removes file and refreshes list from USB.
+- Disconnect: detaches DB and clears USB store state.
+
+### Settings screen
+- Edits runtime backend URL and API key.
+- Save updates in-memory API config used by services.
+- Clear temp files remains confirmation-gated action.
+
+### Library screen
+- Currently skeleton sort/filter/action-sheet UI.
+- Full data binding to DB service remains planned follow-up.
+
 ## Edge Cases
 
 | Scenario | Handling |
@@ -145,3 +211,7 @@ GET  /health                          → { status, timestamp }
 | Backend unreachable | Error on Search, Library still usable |
 | Temp files from crashed session | Clean up on app startup |
 | Playlist with 100+ tracks | Queue all, per-song progress, allow cancel per item |
+
+Recovery behavior expectations:
+- USB reconnect should allow re-running attach flow and continuing operations.
+- Failed download keeps queue record in `error` for inspection/retry.
