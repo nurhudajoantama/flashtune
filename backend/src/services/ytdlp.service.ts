@@ -3,6 +3,9 @@ import type { ChildProcess } from 'child_process'
 
 const YTDLP = process.env.YTDLP_PATH ?? 'yt-dlp'
 const FFMPEG = process.env.FFMPEG_PATH ?? 'ffmpeg'
+const COOKIES_PATH = process.env.YTDLP_COOKIES_PATH ?? ''
+
+const cookieArgs = (): string[] => (COOKIES_PATH ? ['--cookies', COOKIES_PATH] : [])
 
 export interface StreamProcesses {
   ytdlp: ChildProcess
@@ -86,6 +89,7 @@ export const search = (query: string): Promise<YtSearchResult[]> => {
       '--flat-playlist',
       '--no-download',
       '--no-playlist',
+      ...cookieArgs(),
     ],
     'yt-dlp search failed',
   ).then((lines) => lines.map(parseEntry).filter((item) => item.source_url.length > 0))
@@ -100,6 +104,7 @@ export const streamDownload = (url: string): StreamProcesses => {
     '-o', '-',
     '--no-playlist',
     '-q',
+    ...cookieArgs(),
     url,
   ])
 
@@ -138,6 +143,7 @@ export const getPlaylistInfo = (url: string): Promise<{ title: string; entries: 
       '--flat-playlist',
       '--dump-json',
       '--no-download',
+      ...cookieArgs(),
       url,
     ],
     'yt-dlp playlist failed',
